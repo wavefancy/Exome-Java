@@ -35,6 +35,14 @@ import java.util.StringJoiner;
  *      Filter by recessive model, 100% penetrate. 
  *      1. all unaffected individual carrying non-refHomo genotype.
  *      2. In a candidate family, all affected individual carry refHomo genotype.
+ * 
+ * @version 2.3.
+ * 1. add function for dominant model.
+ * * Filter by dominant model, since 2.3.
+         * Dominant (assume 100% penetrate).
+         * 1. unaffected should be 00.
+         * 2. In a candidate family affected should be 01 or 11.
+ * 
  * @author wallace
  *
  */
@@ -94,7 +102,7 @@ public class ExomeModelFilterV2 {
 	
 	private static void help() {
 		System.out.println("--------------------------------");
-		System.out.println("    ExomeModelFilter    version: 2.2     Author:wavefancy@gmail.com");
+		System.out.println("    ExomeModelFilter    version: 2.3     Author:wavefancy@gmail.com");
 		System.out.println("--------------------------------");
 		System.out.println("Usages: \nparameter1: ped file."
 //				+ "\nparameter2(int): Column index for individual seq. starts(Inclusive)."
@@ -185,12 +193,13 @@ public class ExomeModelFilterV2 {
 //	}
 	
 	/**
-	 * Check if all member having alt. allele.
+	 * Check if all member having alt. allele,(genotype 11 or 01).
+     * return false if all member are missing.
 	 * @param names
 	 * @param genotypes
 	 * @return
 	 */
-	private static boolean allAltAllele(List<String> names, String[] genotypes){
+	private static boolean allAltAlleleAllMissingFalse(List<String> names, String[] genotypes){
 		String[] nonMissingN = names.stream()
 				.filter(s -> {					
 					return genotypes[nameIndexMap.get(s)].charAt(0) != '.';})
@@ -228,7 +237,7 @@ public class ExomeModelFilterV2 {
          * @param genotypes
          * @return 
          */
-        private static String[] nonMissingNames(List<String> names, String[] genotypes) {
+    private static String[] nonMissingNames(List<String> names, String[] genotypes) {
 		return names.stream()
 			.filter(s -> genotypes[nameIndexMap.get(s)].charAt(0) != '.')
 			.toArray(String[]::new);
@@ -251,7 +260,7 @@ public class ExomeModelFilterV2 {
          * @param genotypes
          * @return true if 
          */
-        private static boolean hasRefHomo(List<String> names, String[] genotypes){
+    private static boolean hasRefHomo(List<String> names, String[] genotypes){
 //            names.stream()
 //              .forEach(s -> System.out.println(s + ":" + genotypes[nameIndexMap.get(s)]));
             
@@ -264,13 +273,13 @@ public class ExomeModelFilterV2 {
         }
         
         /**
-         * Check whether all individuals carrying refHomo genotype.
+         * Check whether all individuals carrying altHomo[11] genotype.
          * ** if all individuals are missing, return false.
          * @param names
          * @param genotypes
          * @return 
          */
-        private static boolean allRefHomo(List<String> names, String[] genotypes){
+        private static boolean allAltHomoAllMissingFalse(List<String> names, String[] genotypes){
             String[] nonMissing = nonMissingNames(names, genotypes);
             if(nonMissing.length == 0){
                 return false;
@@ -279,6 +288,35 @@ public class ExomeModelFilterV2 {
             long cc =  Arrays.stream(nonMissing)
               .filter(s-> genotypes[nameIndexMap.get(s)].charAt(0) != '0'
                          && genotypes[nameIndexMap.get(s)].charAt(2) != '0'
+              ).count();
+            
+            if(cc == nonMissing.length){
+                return true;
+            }else{
+                return false;
+            }
+        }
+        
+         /**
+         * Check whether all individuals carrying refHomo genotype.
+         * ** if all individuals are missing, return true.
+         * @param names
+         * @param genotypes
+         * @return 
+         */
+        private static boolean allRefHomoAllMissingTrue(List<String> names, String[] genotypes){
+//            for(String s : names){
+//                System.out.println(genotypes[nameIndexMap.get(s)]);
+//            }
+            
+            String[] nonMissing = nonMissingNames(names, genotypes);
+            if(nonMissing.length == 0){
+                return true;
+            }
+            
+            long cc =  Arrays.stream(nonMissing)
+              .filter(s-> genotypes[nameIndexMap.get(s)].charAt(0) == '0'
+                         && genotypes[nameIndexMap.get(s)].charAt(2) == '0'
               ).count();
             
             if(cc == nonMissing.length){
@@ -368,89 +406,7 @@ public class ExomeModelFilterV2 {
 
                     switch (imodel) {
                     case "dom":
-//						//check control. no alt. allele.
-//						boolean controlAlt = controlFamilies.keySet().stream()
-//							.parallel()
-//							.anyMatch(s -> anyAltAllele(controlFamilies.get(s), ss));
-//						
-//						if (controlAlt) { //control having alt allele. skip this variants.
-//							return;
-//						}else {
-                                            //Looking after candidate families.
-                                            String[] candidateFs = caseFamilies.keySet().stream()
-                                                    .parallel()
-                                                    .filter(s -> allAltAllele(caseFamilies.get(s), ss))
-                                                    .toArray(String[]::new);
-
-                                            if (candidateFs.length <= 0) {
-                                                    return; //no candidate family.
-                                            }
-
-                                            StringBuilder sBuilder = new StringBuilder();
-                                            for (int i = 0; i < 5; i++) { //copy meta info.
-                                                    sBuilder.append(ss[i]).append("\t");
-                                            }
-                                            sBuilder.append(".\t.\t");
-
-                                            //prepare INFO, Candidate family number, Candidate individual number.
-                                            Arrays.sort(candidateFs);
-
-                                            int tIds = 0; //non-missing candidate individuals.
-                                            for (String fm : candidateFs) {
-//								for (String idn : caseFamilies.get(fm)) {
-                                                    for (String idn : caseFamilies.get(fm)){
-                                                            //only count non-missing individuals.
-                                                            if (ss[nameIndexMap.get(idn)].charAt(0) != '.') {
-                                                                    tIds++;
-                                                            }
-                                                    }
-
-                                                    sBuilder.append("(");
-                                                    for (String idn : allFamilies.get(fm)) { //output the whole family, not only the cases.	
-                                                            sBuilder.append(fm).append("_");
-                                                            sBuilder.append(idn).append("-");
-                                                            sBuilder.append(ss[nameIndexMap.get(idn)]).append("||");
-                                                    }
-                                                    sBuilder.setLength(sBuilder.length()-2);
-                                                    sBuilder.append(")");
-                                            }
-
-
-                                            //remove the last '||)'
-//							sBuilder.setLength(sBuilder.length()-3);
-//							sBuilder.append(")");
-
-                                            //Candidate family number, Candidate individual number.
-                                            sBuilder.append("\t");
-                                            sBuilder.append(candidateFs.length).append("\t");
-                                            sBuilder.append(tIds).append("\t");
-
-                                            //non-missing controls.
-                                            long nmc = controlFamilies.keySet().stream()
-                                                            .parallel()
-                                                            .mapToLong(s -> nonMissingCount(controlFamilies.get(s), ss))
-                                                            .sum();
-
-                                            sBuilder.append(nmc).append("\t");
-
-                                            //total-nonmissing families.
-                                            long tnf = allFamilies.keySet().stream()
-                                                            .parallel()
-                                                            .filter(s -> !allMissing(allFamilies.get(s), ss))
-                                                            .count();
-                                            sBuilder.append(tnf);
-
-                                            //total-nonmissing control families.
-//							long tncf = controlFamilies.keySet().stream()
-//									.parallel()
-//									.filter(s -> ! allMissing(controlFamilies.get(s), ss))
-//									.count();
-//							sBuilder.append(tncf);
-
-                                            //writer.write(sBuilder.toString());
-                                            //writer.newLine();
-//						}
-
+                            dominantModel(ss);
                             break;
 
                     case "rec":
@@ -472,18 +428,18 @@ public class ExomeModelFilterV2 {
         
         /**
          * Filter by recessive model, 100% penetrate. 
-         * 1. all unaffected individual carrying non-refHomo genotype.
-         * 2. In a candidate family, all affected individual carry refHomo genotype.
+         * 1. all unaffected individual carrying 00/01 [refHom or Hetero.] genotype.
+         * 2. In a candidate family, all affected individual carry [11]refHomo genotype.
          * @param oneLineArr 
          */
         private static void recessiveModel(String[] oneLineArr){
 //            System.err.println(ctrlNames);
 //            System.err.println(hasRefHomo(ctrlNames, oneLineArr));
             if (hasRefHomo(ctrlNames, oneLineArr)) {
-                //has refHomo in control, assume 100% penetrate, skip this site.
+                //has refHomo[11] in control, assume 100% penetrate, skip this site.
                 //return;
             }else{
-                //check candiates families. all unaffectd individual at this site carring non-refHomo.
+                //check candiates families. all unaffectd individual at this site carring non-refHomo genotype [00/01].
                 //candidate family genotype, and total of individal in these families, including unaffected.
                 int total = 0;
                 int cfCount = 0; //candiate family count.
@@ -492,7 +448,7 @@ public class ExomeModelFilterV2 {
                 StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
                 
                 for (String cfname :  caseFamilies.keySet()) {
-                    if(allRefHomo(caseFamilies.get(cfname), oneLineArr)){ //candidate family.
+                    if(allAltHomoAllMissingFalse(caseFamilies.get(cfname), oneLineArr)){ //candidate family.
                         
                         //candidateFamilies.add(cfname);
                         cfCount += 1;
@@ -542,6 +498,84 @@ public class ExomeModelFilterV2 {
                 //output final results.
                 System.out.println(sj.toString());
             }
+        }
+        
+        /**
+         * Filter by dominant model, since 2.3.
+         * Dominant (assume 100% penetrate).
+         * 1. unaffected should be 00.
+         * 2. In a candidate family affected should be 01 or 11.
+         * @param oneLineArr 
+         */
+        private static void dominantModel(String[] oneLineArr){
+//            System.out.println("exome.ExomeModelFilterV2.dominantModel()");
+            String[] ss = oneLineArr;
+//            System.out.println(ctrlNames);
+//            System.out.println("allRefHomoAllMissingTrue(ctrlNames, ss)" + allRefHomoAllMissingTrue(ctrlNames, ss));
+            if(allRefHomoAllMissingTrue(ctrlNames, ss) == false){
+                // pass this variants, unmet conditon 1.0.
+            }else{// all ref homo[00] or all missing.
+                //check candiates families. all unaffectd individual at this site carring 00.
+                //candidate family genotype, and total of individal in these families, including unaffected.
+                int total = 0;   //total individuals in candidate family, including unaffected.
+                int cfCount = 0; //candiate family count.
+                //List<String> candidateFamilies = new LinkedList<String>();
+                
+                StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
+                
+                for (String cfname :  caseFamilies.keySet()) {
+                    if(allAltAlleleAllMissingFalse(caseFamilies.get(cfname), oneLineArr)){ //candidate family.
+                        
+                        //candidateFamilies.add(cfname);
+                        cfCount += 1;
+                        total += caseFamilies.get(cfname).size();
+                        //affected geno in a family.
+                        StringBuilder sb = new StringBuilder();
+                        sb.append("("+cfname+"[");
+                        for(String n: caseFamilies.get(cfname)){
+                            sb.append(n).append(":");
+                            sb.append(getGenoAndCov(n, oneLineArr));
+                            sb.append(",");
+                        }
+                        sb.setLength(sb.length()-1); //remove last ",".
+                        sb.append("]");
+                        //unaffected geno in a family.
+                        if(controlFamilies.containsKey(cfname)){
+                            total += controlFamilies.get(cfname).size();
+                            for(String n: controlFamilies.get(cfname)){
+                                sb.append(",");
+                                sb.append(n).append(":");
+                                sb.append(getGenoAndCov(n, oneLineArr));
+                            }
+                        }
+                        sb.append(")");
+                        cfGeno.add(sb.toString());
+                    }
+                }
+                
+                //skip if no candidate family.
+                if(cfCount <= 0){
+                    return;
+                }
+               
+                //output final results.
+                //chr pos ref alt #candidateFamilies #averageSize #Genotypes
+                StringJoiner sj = new StringJoiner("\t");
+                sj.add(oneLineArr[0]);
+                sj.add(oneLineArr[1]);
+                sj.add(oneLineArr[3]);
+                sj.add(oneLineArr[4]);
+                
+                sj.add(Integer.toString(cfCount));
+                sj.add(formater.format(total * 1.0 / cfCount));
+                
+                sj.add(cfGeno.toString());
+            
+                //output final results.
+                System.out.println(sj.toString());
+            }
+            
+            
         }
                 
 }
