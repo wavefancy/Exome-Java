@@ -45,6 +45,10 @@ import java.util.StringJoiner;
  * @version 2.3.1
  * 1. separate individual by ';', other than ','
  * 
+ * @version 2.4
+ * 1. Add function to remove candidate sites for dominant model if ref-homo was 
+ *    observed on chr1-chr22 or chrX for female.
+ * 
  * @author wallace
  *
  */
@@ -59,8 +63,13 @@ public class ExomeModelFilterV2 {
 	private static String[] nameArr;
 	private static Map<String, Integer> nameIndexMap = new HashMap<String, Integer>(); //idname -> Array_index
 	private static Set<String> pedIdSet = new HashSet<>(); 
-        private static List<String> ctrlNames = new LinkedList<String>(); //name list for all control.
-        private static final DecimalFormat formater = new DecimalFormat(".####");
+    private static List<String> ctrlNames = new LinkedList<String>(); //name list for all control.
+    private static final DecimalFormat formater = new DecimalFormat(".####");
+    
+    //version 2.4
+    static boolean checkDomAltHomo = true;
+    //male 1, female 2.
+    private static final Map<String, String> genderMap = new HashMap<>();
 	
 	private static String imodel = "dom"; //inherent model.
 	
@@ -104,7 +113,7 @@ public class ExomeModelFilterV2 {
 	
 	private static void help() {
 		System.out.println("--------------------------------");
-		System.out.println("    ExomeModelFilter    version: 2.3     Author:wavefancy@gmail.com");
+		System.out.println("    ExomeModelFilter    version: 2.4     Author:wavefancy@gmail.com");
 		System.out.println("--------------------------------");
 		System.out.println("Usages: \nparameter1: ped file."
 //				+ "\nparameter2(int): Column index for individual seq. starts(Inclusive)."
@@ -156,6 +165,11 @@ public class ExomeModelFilterV2 {
 					default:
 						System.err.println("Warnning: Skip no phenotype individual:" + ss[1]);
 					}
+                    
+                    //recode gender info.
+                    if (checkDomAltHomo) {
+                        genderMap.put(ss[1], ss[4]); //male 1, female 2.
+                    }
 				});
 			
 			
@@ -526,7 +540,9 @@ public class ExomeModelFilterV2 {
                 StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
                 
                 for (String cfname :  caseFamilies.keySet()) {
-                    if(allAltAlleleAllMissingFalse(caseFamilies.get(cfname), oneLineArr)){ //candidate family.
+                    if(allAltAlleleAllMissingFalse(caseFamilies.get(cfname), oneLineArr)
+                            && checkAltHomo4Dom(caseFamilies.get(cfname), oneLineArr)
+                            ){ //candidate family.
                         
                         //candidateFamilies.add(cfname);
                         cfCount += 1;
@@ -578,6 +594,33 @@ public class ExomeModelFilterV2 {
             }
             
             
+        }
+        
+        /**
+         * True if all non-altHomo. or altHomo on male X. Otherwise false.
+         * @param names
+         * @param oneLineArr
+         * @return 
+         */
+        private static boolean checkAltHomo4Dom(List<String> caseNames, String[] oneLineArr){
+            for (String name : caseNames) {
+                int index = nameIndexMap.get(name);
+                //skip missing and gender info missing individuals.
+                if(oneLineArr[index].charAt(0) == '.' || genderMap.get(name).equalsIgnoreCase("0")){
+                    continue;
+                }
+                
+                if (oneLineArr[index].charAt(0) != '0' && oneLineArr[index].charAt(2) != '0') { //alt homo.
+                    //only permit male, X for alt-homo.
+                    if (! (oneLineArr[0].substring(oneLineArr[0].length()-1, oneLineArr[0].length()).equalsIgnoreCase("x")
+                            && genderMap.get(name).equalsIgnoreCase("1"))
+                            ) {
+                        return  false;
+                    }
+                }
+            }
+            
+            return true;
         }
                 
 }
