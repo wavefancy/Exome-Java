@@ -42,6 +42,8 @@ import java.util.StringJoiner;
          * Dominant (assume 100% penetrate).
          * 1. unaffected should be 00.
          * 2. In a candidate family affected should be 01 or 11.
+ * @version 2.3.1
+ * 1. separate individual by ';', other than ','
  * 
  * @author wallace
  *
@@ -459,7 +461,7 @@ public class ExomeModelFilterV2 {
                         for(String n: caseFamilies.get(cfname)){
                             sb.append(n).append(":");
                             sb.append(getGenoAndCov(n, oneLineArr));
-                            sb.append(",");
+                            sb.append(";"); //separate individual by ';'
                         }
                         sb.setLength(sb.length()-1); //remove last ",".
                         sb.append("]");
@@ -467,7 +469,7 @@ public class ExomeModelFilterV2 {
                         if(controlFamilies.containsKey(cfname)){
                             total += controlFamilies.get(cfname).size();
                             for(String n: controlFamilies.get(cfname)){
-                                sb.append(",");
+                                sb.append(";"); ////separate individual by ';'
                                 sb.append(n).append(":");
                                 sb.append(getGenoAndCov(n, oneLineArr));
                             }
@@ -535,7 +537,7 @@ public class ExomeModelFilterV2 {
                         for(String n: caseFamilies.get(cfname)){
                             sb.append(n).append(":");
                             sb.append(getGenoAndCov(n, oneLineArr));
-                            sb.append(",");
+                            sb.append(";"); //separate individual by ';'
                         }
                         sb.setLength(sb.length()-1); //remove last ",".
                         sb.append("]");
@@ -543,7 +545,7 @@ public class ExomeModelFilterV2 {
                         if(controlFamilies.containsKey(cfname)){
                             total += controlFamilies.get(cfname).size();
                             for(String n: controlFamilies.get(cfname)){
-                                sb.append(",");
+                                sb.append(";"); //separate individual by ';'
                                 sb.append(n).append(":");
                                 sb.append(getGenoAndCov(n, oneLineArr));
                             }
