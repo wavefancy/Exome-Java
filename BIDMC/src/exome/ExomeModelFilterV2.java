@@ -49,6 +49,9 @@ import java.util.StringJoiner;
  * 1. Add function to remove candidate sites for dominant model if ref-homo was 
  *    observed on chr1-chr22 or chrX for female.
  * 
+ * @version 2.4.1
+ * 1. Recognize 0|. or .|0 for dominant model, treat this as ref-homo.
+ * 
  * @author wallace
  *
  */
@@ -210,7 +213,7 @@ public class ExomeModelFilterV2 {
 	
 	/**
 	 * Check if all member having alt. allele,(genotype 11 or 01).
-     * return false if all member are missing.
+         * return false if all member are missing.
 	 * @param names
 	 * @param genotypes
 	 * @return
@@ -227,8 +230,8 @@ public class ExomeModelFilterV2 {
 		
 		//check non-missing individual, if somebody without alt. allele.
 		for (String string : nonMissingN) {
-			String geno = genotypes[nameIndexMap.get(string)];
-			if(geno.charAt(0) == '0' && geno.charAt(2) == '0') //no alt. allele.
+			String geno = genotypes[nameIndexMap.get(string)]; //check 00 or 0|. or .|0.
+			if((geno.charAt(0) == '0' || geno.charAt(0) == '.' ) && ( geno.charAt(2) == '0' || geno.charAt(2) == '.')) //no alt. allele.
 				return false;
 		}
 		
@@ -315,7 +318,8 @@ public class ExomeModelFilterV2 {
         
          /**
          * Check whether all individuals carrying refHomo genotype.
-         * ** if all individuals are missing, return true.
+         * ** 1. if all individuals are missing, return true.
+         * ** 2. if all individuals are refHomo (00) return true.
          * @param names
          * @param genotypes
          * @return 
@@ -540,7 +544,9 @@ public class ExomeModelFilterV2 {
                 StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
                 
                 for (String cfname :  caseFamilies.keySet()) {
+                    //Check if all member having alt. allele,(genotype 11 or 01).
                     if(allAltAlleleAllMissingFalse(caseFamilies.get(cfname), oneLineArr)
+                            
                             && checkAltHomo4Dom(caseFamilies.get(cfname), oneLineArr)
                             ){ //candidate family.
                         
