@@ -1,4 +1,4 @@
-package gwas.mixscore;
+package mixscore;
 
 import java.text.DecimalFormat;
 
