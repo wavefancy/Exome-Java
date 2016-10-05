@@ -30,7 +30,6 @@ public class FisherYatesArrayShuffle {
             String t = inArr[i];
             inArr[i] = inArr[index];
             inArr[index] = t;
-            
         }
     }
     
