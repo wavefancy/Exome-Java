@@ -27,11 +27,10 @@ public class FisherYatesArrayShuffle {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         for (int i = inArr.length -1 ; i > 0; i--) {
             int index = random.nextInt(i+1);
-            if (index != i) {
-                String t = inArr[i];
-                inArr[i] = inArr[index];
-                inArr[index] = t;
-            }
+            String t = inArr[i];
+            inArr[i] = inArr[index];
+            inArr[index] = t;
+            
         }
     }
     
