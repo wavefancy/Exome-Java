@@ -115,11 +115,11 @@ public class BootstrapingMain {
 		modelSet.add("recessive");
 		modelSet.add("compound");
 
-		String a = ((String) opts.get("-a")).toLowerCase(Locale.ENGLISH); //get algorithm names.
+		String a = ((String) opts.get("-m")).toLowerCase(Locale.ENGLISH); //get algorithm names.
 		if (modelSet.contains(a)) {
 			model = a;
 		}else {
-			System.err.println("ERROR: please set proper parameter for -a.");
+			System.err.println("ERROR: please set proper parameter for -m.");
 			System.exit(-1);
 		}
         
@@ -157,7 +157,7 @@ public class BootstrapingMain {
                 System.out.println(key + "\t0\t0\tNA");
             }else{
                 System.out.println(key + "\t" + Integer.toString(value[0]) +  
-                        "\t" + Integer.toString(value[1]) + "\t" + format.format(value[0] * 1.0 / (value[0] + value[1])));
+                        "\t" + Integer.toString(value[1]) + "\t" + format.format(value[1] * 1.0 / (value[0] + value[1])));
             }
         }
 	}
@@ -173,6 +173,9 @@ public class BootstrapingMain {
                 .forEach((String s) -> {
                     gMap.get(s)[1] = gMap.get(s)[1] +1;
                 });
+//        System.out.println("------bootstrapByFam.BootstrapingMain.geneCounter()----");
+//        System.out.println(caseGeneArr.toString());
+//        System.out.println(ctrlGeneArr.toString());
     }
     
     private static void permute(){
@@ -215,5 +218,11 @@ public class BootstrapingMain {
                 geneCountMap.get(key)[1] += 1;
             }
         }
+        
+//        for (Map.Entry<String, int[]> entry : gMap.entrySet()) {
+//            String key = entry.getKey();
+//            int[] value = entry.getValue();
+//            System.out.println(key + "\t" + Arrays.toString(value));
+//        }
     }
 }
