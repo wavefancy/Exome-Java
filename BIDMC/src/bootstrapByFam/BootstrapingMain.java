@@ -8,13 +8,20 @@ package bootstrapByFam;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.DecimalFormat;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import org.docopt.Docopt;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.IntStream;
 
 /**
  *
@@ -29,7 +36,7 @@ public class BootstrapingMain {
     
     static int ptime = 0; // number of permutations.
     
-    static final Map<String, int[]> geneCountMap = new HashMap<>(); // Record the number of times of #Case>=Ctrl, #Case<Ctrl for each gene. 
+    static final Map<String, int[]> geneCountMap = new ConcurrentHashMap<>(); // Record the number of times of #Case>=Ctrl, #Case<Ctrl for each gene. 
     
 	private static final String doc =
 		    "BootstrappingRare.\n"
@@ -118,15 +125,95 @@ public class BootstrapingMain {
         
         //prepare data for computing.
         aFamArray = new Family[aFamMap.size()];
-        for (Map.Entry<String, Object> entry : aFamMap) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-            
+        int t_index  = 0;
+        for (Map.Entry<String, Family> entry : aFamMap.entrySet()) {
+            entry.getValue().listToArray();
+            aFamArray[t_index++] = entry.getValue();
         }
+        t_index = 0;
+        uFamArray = new Family[uFamMap.size()];
+        for (Map.Entry<String, Family> entry : uFamMap.entrySet()) {
+            entry.getValue().listToArray();
+            uFamArray[t_index++] = entry.getValue();
+        }
+        aFamMap = null;
+        uFamMap = null;
         
+        // permutation starts from here.
+        IntStream.range(0, ptime)
+                .parallel()
+                .forEach(s -> {
+                    permute();
+                });
+        
+        // output results.
+        DecimalFormat format = new DecimalFormat();
+        System.out.println("Gene\tCaseBigger\tCtrolBiger\tPvalue");
+        for (Map.Entry<String, int[]> entry : geneCountMap.entrySet()) {
+            String key = entry.getKey();
+            int[] value = entry.getValue();
+            
+            if ( value[0] == 0 && value[0] == value[1]) {
+                System.out.println(key + "\t0\t0\tNA");
+            }else{
+                System.out.println(key + "\t" + Integer.toString(value[0]) +  
+                        "\t" + Integer.toString(value[1]) + "\t" + format.format(value[0] * 1.0 / (value[0] + value[1])));
+            }
+        }
 	}
     
-    private void permute(){
+    private static void geneCounter(Map<String,int[]> gMap, List<String> caseGeneArr, List<String> ctrlGeneArr){
+        caseGeneArr.stream()
+                .forEach((String s) -> {
+                    gMap.get(s)[0] = gMap.get(s)[0] +1;
+                });
+        //Only count gene in candidate gene list.
+        ctrlGeneArr.stream()
+                .filter((String s) -> gMap.containsKey(s))
+                .forEach((String s) -> {
+                    gMap.get(s)[1] = gMap.get(s)[1] +1;
+                });
+    }
+    
+    private static void permute(){
+        Random rndRandom = ThreadLocalRandom.current();
         
+        Map<String,int[]> gMap = new HashMap<>(geneCountMap.size());  //geneName -> #AffectedFamily, #unaffectedFamily.
+        for (Map.Entry<String, int[]> entry : geneCountMap.entrySet()) {
+            String key = entry.getKey();
+            int[] value = {0,0};
+            gMap.put(key, value);
+        }
+        
+        for (Family afam : aFamArray) {
+            Family ufam = uFamArray[rndRandom.nextInt(uFamArray.length)];
+            String[] aArr = afam.getGeneArrayCopy();
+            String[] uArr = ufam.getGeneArrayCopy();
+            List<String> aList = Arrays.asList(aArr);
+            List<String> uList = Arrays.asList(uArr);
+            if (aArr.length < uArr.length) {
+                uList = FisherYatesArrayShuffle.Shuffle(uArr, aArr.length);
+            }else if (aArr.length > uArr.length) {
+                aList = FisherYatesArrayShuffle.Shuffle(aArr, uArr.length);
+            }
+            geneCounter(gMap, aList, uList);
+        }
+        
+        
+        //get summary data from permutation.
+        for (Map.Entry<String, int[]> entry : gMap.entrySet()) {
+            String key = entry.getKey();
+            int[] value = entry.getValue();
+            
+            if (value[0] == 0 && value[0] == value[1]) {
+                continue;
+            }
+            
+            if (value[0] >= value[1]) {
+                geneCountMap.get(key)[0] += 1;
+            }else{
+                geneCountMap.get(key)[1] += 1;
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@ package bootstrapByFam;
 
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Shuffle array by Fisher-Yates Algorithm.
@@ -40,7 +41,7 @@ public class FisherYatesArrayShuffle {
      * @param length
      * @return 
      */
-    public static String[] Shuffle(String[] inArr, int length){
+    public static List<String> Shuffle(String[] inArr, int length){
         ThreadLocalRandom random = ThreadLocalRandom.current();
         for (int i = 0; i < inArr.length; i++) {
             int index = random.nextInt(i,inArr.length);
@@ -52,9 +53,11 @@ public class FisherYatesArrayShuffle {
             }
         }
         
-        return Arrays.copyOf(inArr, length);
+        return  Arrays.asList(inArr).subList(0, length);
+        //return Arrays.copyOf(inArr, length);
     }
-    
+   
+
     public static void main(String[] args) {
         String[] temp = {"1","2","3","4"};
         //FisherYatesArrayShuffle.Shuffle(temp);
