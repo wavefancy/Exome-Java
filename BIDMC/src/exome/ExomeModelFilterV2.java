@@ -688,11 +688,12 @@ public class ExomeModelFilterV2 {
                 String gene = entry.getKey();
                 List<String> value = entry.getValue();
                 int[] vIndex =  value.stream()
+                           .filter(s -> variantIndexMap.get(s) != null) //varinat in annotation but not in vcf file.
                            .mapToInt(s->{
-                               if (variantIndexMap.get(s) == null) {
-                                   System.err.println("ERROR: Can not find this entry in vcf file, please check vcf and annotation file: " + s);
-                                   System.exit(-1);
-                                }
+//                               if (variantIndexMap.get(s) == null) {
+//                                   System.err.println("ERROR: Can not find this entry in vcf file, please check vcf and annotation file: " + s);
+//                                   System.exit(-1);
+//                                }
                                return variantIndexMap.get(s);})
                            .toArray();
                 
