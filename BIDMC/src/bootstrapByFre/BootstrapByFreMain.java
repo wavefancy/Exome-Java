@@ -39,13 +39,13 @@ public class BootstrapByFreMain {
     static final Map<String, Integer> geneCountMap = new  HashMap<>();
     static final DecimalFormat dformater = new DecimalFormat("0.00E00");
     static int ntotalIndividuals = 0;
-    static double mutationRate = 1e-8; //mutation rate for denovo mutation.
+    static double mutationRate = 1e-6; //mutation rate for denovo mutation.
     
     private static final String doc =
 		    "BootstrapByFre.\n"
 		    + "\n"
 		    + "Usage:\n"
-		    + "  BootstrapByFre -a afile -c cfile -m model -i nIDs [-n ptimes] [-t cpus] [-e etotal] \n"
+		    + "  BootstrapByFre -a afile -c cfile -m model -i nIDs [-n ptimes] [-t cpus] [-e etotal] [-r mrate] \n"
 		    + "  BootstrapByFre (-h | --help)\n"
 		    + "  BootstrapByFre --version\n"
 		    + "\n"
@@ -57,6 +57,7 @@ public class BootstrapByFreMain {
             + "  -i nIDs       Number of individuals.\n"
             + "  -n ptimes     Number of times each increase for addaptive permutation, default 1000.\n"
             + "  -e etotal     Total number of permutations, default 1e5.\n"
+            + "  -r mrate      The mutation rate for de novo mutation, default 1e-6.\n"
 		    + "  -t cpus       Number of cpus for computing.\n"
 		    + "  -h --help     Show this screen.\n"
 		    + "  --version     Show version.\n"
@@ -80,6 +81,9 @@ public class BootstrapByFreMain {
         ntotalIndividuals = Integer.parseInt((String) opts.get("-i"));
         if(opts.get("-e") != null){
 			ntotalPerm = (int) Double.parseDouble((String) opts.get("-e"));
+		}
+        if(opts.get("-r") != null){
+			mutationRate = Double.parseDouble((String) opts.get("-r"));
 		}
               
         try {
