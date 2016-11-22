@@ -89,7 +89,7 @@ public class ExomeModelFilterV2 {
 	private static Map<String, Integer> nameIndexMap = new HashMap<String, Integer>(); //idname -> Array_index
 	private static Set<String> pedIdSet = new HashSet<>(); 
     private static List<String> ctrlNames = new LinkedList<String>(); //name list for all control.
-    private static final DecimalFormat formater = new DecimalFormat(".####");
+    private static final DecimalFormat formater = new DecimalFormat("#.####");
     
     private static String geneAnnoFile = ""; // gene annotation file, for compound hetero. model.
     private static Map<String,List<String>> geneAnnoMap = new HashMap<>(); //geneName -> variant list.
