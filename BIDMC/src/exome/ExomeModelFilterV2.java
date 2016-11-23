@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -46,11 +47,32 @@ import java.util.StringJoiner;
  * 1. separate individual by ';', other than ','
  * 
  * @version 2.4
- * 1. Add function to remove candidate sites for dominant model if ref-homo was 
+ * 1. Add function to remove candidate sites for dominant model if alt-homo was 
  *    observed on chr1-chr22 or chrX for female.
+ *  
+ *    1. gender coding, 1 for male, 2 for female.
+ *    2. only permit male or gender missing, X for alt-homo.
  * 
  * @version 2.4.1
  * 1. Recognize 0|. or .|0 for dominant model, treat this as ref-homo.
+ * 
+ * @version 2.4.2
+ * 1. Add function to filter by maximum of candidate families.
+ *      A true rare variants should not be shared by many families.
+ *      *** Only implemented for Dominant model at this stage.
+ * 
+ * @version 2.5.
+ * 1. Permit alt homo on male Y for dominant model.
+ * 2. Add function for checking compound heterozyous model.
+ * 
+ * @version 2.5.1.
+ * 1. Add function to remove MNP sites when perform COM HET checking.
+ *  MNP: http://www.sequenceontology.org/miso/release_2.2/term/SO:0001013
+ * 
+ * @version 2.5.2
+ * 1. Add function to estimate rare variant family sharing rate.
+ *      Only use family with het. genotype. family with all ref-homo or at least 
+ *      one alt-homo will be excluded.
  * 
  * @author wallace
  *
@@ -67,7 +89,12 @@ public class ExomeModelFilterV2 {
 	private static Map<String, Integer> nameIndexMap = new HashMap<String, Integer>(); //idname -> Array_index
 	private static Set<String> pedIdSet = new HashSet<>(); 
     private static List<String> ctrlNames = new LinkedList<String>(); //name list for all control.
-    private static final DecimalFormat formater = new DecimalFormat(".####");
+    private static final DecimalFormat formater = new DecimalFormat("#.####");
+    
+    private static String geneAnnoFile = ""; // gene annotation file, for compound hetero. model.
+    private static Map<String,List<String>> geneAnnoMap = new HashMap<>(); //geneName -> variant list.
+    private static String[][] comDataMatrix = null;
+    private static LinkedList<String[]> tempList = new LinkedList<>(); //temp data for checking compound hetero.
     
     //version 2.4
     static boolean checkDomAltHomo = true;
@@ -75,6 +102,16 @@ public class ExomeModelFilterV2 {
     private static final Map<String, String> genderMap = new HashMap<>();
 	
 	private static String imodel = "dom"; //inherent model.
+    private static int MaxCandiateFamilies = 5000;
+    
+    private static boolean removeMNP = true;
+    private static int MNPlen = 3; //the distance of two sites to treated as MNP.
+    //example MNPS
+    // chr19-6693067-G-C and chr19-6693069-A-G, 
+    // http://exac.broadinstitute.org/variant/19-6693069-A-G
+    // chr15-62942342-G-A and chr15-62942343-C-A
+    // http://exac.broadinstitute.org/variant/15-62942342-G-A
+
 	
 	public static void main(String[] args) {
 		List<String> argList = new ArrayList<>(5);
@@ -83,7 +120,16 @@ public class ExomeModelFilterV2 {
 			switch (args[i]) {
 			case "-t":
 				i++; System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", args[i]);
-				break;			
+				break;	
+            case "-m":
+                i++;    MaxCandiateFamilies = Integer.parseInt(args[i]);
+                break;
+            case "-a":
+                i++; geneAnnoFile = args[i];
+                break;
+            case "-cmnp":
+                removeMNP = false;
+                break;
 			case "-mod":
 				i++;
 					switch (args[i]) {
@@ -95,8 +141,10 @@ public class ExomeModelFilterV2 {
 						break;
 					case "com":
 						imodel = args[i]; break;
+                    case "eshare":
+                        imodel = args[i]; break;
 					default:
-						System.err.println("The -mod parameter should be dom|rec|com for dominant, recessive or compound heterozygosity model.");
+						System.err.println("The -mod parameter should be dom|rec|com|eshare for dominant, recessive or compound heterozygosity model.");
 						System.exit(-1);
 					}
 				break;
@@ -116,15 +164,21 @@ public class ExomeModelFilterV2 {
 	
 	private static void help() {
 		System.out.println("--------------------------------");
-		System.out.println("    ExomeModelFilter    version: 2.4     Author:wavefancy@gmail.com");
+		System.out.println("    ExomeModelFilter    version: 2.5     Author:wavefancy@gmail.com");
 		System.out.println("--------------------------------");
 		System.out.println("Usages: \nparameter1: ped file."
 //				+ "\nparameter2(int): Column index for individual seq. starts(Inclusive)."
 				+ "\nparameter(-t  int, optional): number of cpus, default all available."
-				+ "\nparameter(-mod String, optional): dom|rec|com for dominant, recessive or compound heterozygous model, default: dom."
+				+ "\nparameter(-mod String, optional): "
+                + "\n          dom|rec|com for dominant, recessive or compound heterozygous model, default: dom."
+                + "\n          eshare: estimate the rare variant sharing rate (currently version, only support auto-chromosome.)."
+                + "\nparameter(-m  int, optional): maxmium number of candidate families, (Default 5000, only for dom model, <=)."
+                + "\nparameter(-a file, optional, required for compound hetero.), gene annotation file."
+                + "\nparameter(-cmnp, optional, only applicable for compound hetero.), close the function to remove MNP sites."
 				);
 		System.out.println("Notes:"
 				+ "\n1. Read vcf file from stdin and output to stdout."
+                + "\n2. Code for gender: 1 for male, 2 for female."
 				+ "\n3. Column index starts from 1." );
 //				+ "\n4. Output PED file to stdout, MAP file to stderr.");
 		System.out.println("--------------------------------");
@@ -175,7 +229,31 @@ public class ExomeModelFilterV2 {
                     }
 				});
 			
-			
+            //for compound heterozygous model.
+            //Read gene annotation file. 
+            if (imodel.equalsIgnoreCase("com")) { //for compound heterozyous model.
+                try {
+                    Files.lines(Paths.get(geneAnnoFile))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .forEach(s -> {
+                            String[] ss = s.split("\\s+"); //chr pos ref alt geneName.
+                            if (!geneAnnoMap.containsKey(ss[4])) {
+                                geneAnnoMap.put(ss[4], new LinkedList<String>());
+                            }
+                            StringJoiner sj = new StringJoiner("-");
+                            for (int i = 0; i <= 3; i++) {
+                                 sj.add(ss[i]);
+                            }
+                            geneAnnoMap.get(ss[4]).add(sj.toString());
+                        });
+                } catch (Exception ioException) {
+                    System.err.println("ERROR: Can not find gene annotation file[-a]: " + geneAnnoFile);
+                    System.exit(-1);
+                }
+                
+            }
+            
 			// Read vcf from stdin and output stdout.
 			BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
 			//BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(System.out));
@@ -185,8 +263,13 @@ public class ExomeModelFilterV2 {
 				.forEach(s-> processOne(s));
 			in.close();
 			
-                        System.out.flush();
-                        System.err.flush();
+            
+            if(imodel.equalsIgnoreCase("com")){
+                compoundHeterozygousModel();
+            }
+            
+            System.out.flush();
+            System.err.flush();
 //			writer.flush();
 //			writer.close();
 		} catch (IOException e) {
@@ -237,6 +320,47 @@ public class ExomeModelFilterV2 {
 		
 		return true;
 	}
+    
+    /**
+     * Estimate the allele sharing rate.
+     * Only use families with more than one non-missing member.
+     * Remove family if any individual with alt-homo genotype. hard to estimate the rate.
+     * 
+     * @param names
+     * @param genotypes
+     * @return [number of individual with het genotype, total number of individuals in a family.]
+     */
+    private static long [] estimateShareRate(List<String> names, String[] genotypes){
+        long[] re = {-1,-1};
+        String[] nonMissingN = names.stream()
+				.filter(s -> {					
+					return genotypes[nameIndexMap.get(s)].charAt(0) != '.';})
+				.toArray(String[]::new);
+		
+		if (nonMissingN.length <= 1) { //all missing or only 1 individual.
+			return re;
+		}
+        
+        //check any alt-homo
+        boolean anyAltHomo = Arrays.stream(nonMissingN)
+                  .anyMatch(s->{
+                      return genotypes[nameIndexMap.get(s)].charAt(0) != '0' && genotypes[nameIndexMap.get(s)].charAt(2) != '0';
+                  });
+                    
+        if(anyAltHomo){
+            return re;
+        }
+        
+        // number of individual with het genotype.
+        re[0] = Arrays.stream(nonMissingN)
+                  .filter(s -> {
+                      return genotypes[nameIndexMap.get(s)].charAt(0) != '0' || genotypes[nameIndexMap.get(s)].charAt(2) != '0';
+                  })
+                  .count();
+        
+        re[1] = nonMissingN.length;
+        return re;
+    }
 	
 	/**
 	 * Count the number of nonmissing individuals.
@@ -401,24 +525,36 @@ public class ExomeModelFilterV2 {
                             }
 
                             //output title
-                            StringJoiner sJoiner = new StringJoiner("\t");
-//					for (int i = 0; i < 8; i++) {
-//						sJoiner.add(nameArr[i]);
-//					}
+                            if(imodel.equalsIgnoreCase("dom") || imodel.equalsIgnoreCase("rec")){
+                                StringJoiner sJoiner = new StringJoiner("\t");
+                                sJoiner.add(nameArr[0]);
+                                sJoiner.add(nameArr[1]);
+                                sJoiner.add(nameArr[3]);
+                                sJoiner.add(nameArr[4]);
 
-                            sJoiner.add(nameArr[0]);
-                            sJoiner.add(nameArr[1]);
-                            sJoiner.add(nameArr[3]);
-                            sJoiner.add(nameArr[4]);
-
-                            sJoiner.add("#CandidateFamilies");
-                            sJoiner.add("#AverageFamilySize");
-                            sJoiner.add("#CandidatesGenotype");
-                            System.out.println(sJoiner.toString());
-                            //sJoiner.add("#TotalNonMissingFamily");
-//					sJoiner.add("#TotalNonMissingControlFamily");
-//					writer.write(sJoiner.toString());
-//					writer.newLine();
+                                sJoiner.add("#CandidateFamilies");
+                                sJoiner.add("#AverageFamilySize");
+                                sJoiner.add("#CandidatesGenotype");
+                                System.out.println(sJoiner.toString());
+                            }else if (imodel.equalsIgnoreCase("com")) {
+                           
+                                StringJoiner sJoiner = new StringJoiner("\t");
+                                sJoiner.add("GeneName");
+                                sJoiner.add("FamilyName");
+                                sJoiner.add("VariantID");
+                                sJoiner.add("FamilyGenotype");
+                                System.out.println(sJoiner.toString());
+                            }else if (imodel.equalsIgnoreCase("eshare")) {
+                                StringJoiner sJoiner = new StringJoiner("\t");
+                                sJoiner.add(nameArr[0]);
+                                sJoiner.add(nameArr[1]);
+                                sJoiner.add(nameArr[3]);
+                                sJoiner.add(nameArr[4]);
+                                sJoiner.add("#Carrier");
+                                sJoiner.add("#Total");
+                                sJoiner.add("SharingRate");
+                                System.out.println(sJoiner.toString());
+                            }
                     }
 
             }else {
@@ -435,8 +571,13 @@ public class ExomeModelFilterV2 {
                             //System.exit(-1);
                             break;
                     case "com":
-                            System.err.println("Compound heterozygous model has not been implemented!");
-                            System.exit(-1);
+                            tempList.add(ss);
+                        
+                            //System.err.println("Compound heterozygous model has not been implemented!");
+                            //System.exit(-1);
+                            break;
+                    case "eshare":
+                            eshare(ss);
                             break;
                     default:
                             break;
@@ -577,8 +718,8 @@ public class ExomeModelFilterV2 {
                     }
                 }
                 
-                //skip if no candidate family.
-                if(cfCount <= 0){
+                //skip if no candidate family, OR too many candidate families.
+                if(cfCount <= 0 || cfCount > MaxCandiateFamilies){
                     return;
                 }
                
@@ -603,7 +744,141 @@ public class ExomeModelFilterV2 {
         }
         
         /**
-         * True if all non-altHomo. or altHomo on male X. Otherwise false.
+         * Filter by compound heterozyous model, since version 2.5.
+         */
+        private static void compoundHeterozygousModel(){
+            comDataMatrix = new String[tempList.size()][];
+            Map<String,Integer> variantIndexMap = new HashMap<>();
+            int t_index = 0;
+            for (Iterator<String[]> iterator = tempList.iterator(); iterator.hasNext();) {
+                String[] ss = iterator.next();
+//                StringJoiner sj = new StringJoiner("-");
+//                sj.add(ss[0]);
+//                sj.add(ss[1]);
+//                sj.add(ss[3]);
+//                sj.add(ss[4]);
+                variantIndexMap.put(getVariantkey(ss), t_index);
+                comDataMatrix[t_index++] =ss;
+            }
+            tempList.clear();
+            
+            //System.out.println(geneAnnoMap.toString());
+            
+            //checking compound hetero model.
+            for (Map.Entry<String, List<String>> entry : geneAnnoMap.entrySet()) { // Iterate by gene.
+                String gene = entry.getKey();
+                List<String> value = entry.getValue();
+                int[] vIndex =  value.stream()
+                           .filter(s -> variantIndexMap.get(s) != null) //varinat in annotation but not in vcf file.
+                           .mapToInt(s->{
+//                               if (variantIndexMap.get(s) == null) {
+//                                   System.err.println("ERROR: Can not find this entry in vcf file, please check vcf and annotation file: " + s);
+//                                   System.exit(-1);
+//                                }
+                               return variantIndexMap.get(s);})
+                           .toArray();
+                
+                //System.out.println(gene);
+                //System.out.println(Arrays.toString(vIndex));
+                
+                //Iterate by families.
+                for (String caseFamily : caseFamilies.keySet()) {
+//                    int[] idIndex = caseFamilies.get(caseFamily).stream()
+//                                        .mapToInt(s -> nameIndexMap.get(s))
+//                                        .toArray();
+                    
+                    //checking for candidate sites.
+                    int[] passed = Arrays.stream(vIndex)
+                                    //share alt allele, 11/01
+                                    .filter(s -> allAltAlleleAllMissingFalse(caseFamilies.get(caseFamily), comDataMatrix[s]))
+                                    //remove 11 genotype, except male x|y as 11.
+                                    .filter(s -> checkAltHomo4Dom(caseFamilies.get(caseFamily), comDataMatrix[s]))
+                                    .toArray();
+                    //System.err.println("Fam: " +caseFamily);
+                    //System.err.println(Arrays.toString(passed));
+                    
+                    //checking for MNP sites.
+                    if (removeMNP && passed.length >= 2) {
+                        Set<Integer> mnps = new HashSet<>();
+                        long[] pos = Arrays.stream(passed)
+                                .mapToLong(s -> Integer.parseInt(comDataMatrix[s][1]))
+                                .toArray();
+                        //checking for mnp
+                        for (int i = 0; i < pos.length; i++) {
+                            for (int j = i+1; j < pos.length; j++) {
+                                if (Math.abs(pos[i] - pos[j]) <= MNPlen ) {
+                                    mnps.add(i);
+                                    mnps.add(j);
+                                }
+                            }
+                        }
+                        //update passed
+                        int[] newpassed = new int[passed.length - mnps.size()];
+                        int temp_index = 0;
+                        for (int i = 0; i < passed.length; i++) {
+                            if (!mnps.contains(i)) {
+                                newpassed[temp_index++] = passed[i];
+                            }
+                        }
+                        passed = newpassed;
+                    }
+                    
+                    
+                    StringJoiner sj = new StringJoiner("\t");
+                    //candidate gene.
+                    if (passed.length >= 2) {
+                        sj.add(gene);
+                        sj.add(caseFamily);
+                        
+                        //Iterate variant list.
+                        for (int i : passed) {
+                            StringJoiner out = new StringJoiner("\t");
+                            out.add(sj.toString());
+                            out.add(getVariantkey(comDataMatrix[i]));
+                            
+                            //genotype infor for this family at this sites.
+                            StringBuilder sb = new StringBuilder();
+                            sb.append("("+caseFamily+"[");
+                            for(String n: caseFamilies.get(caseFamily)){
+                                sb.append(n).append(":");
+                                sb.append(getGenoAndCov(n, comDataMatrix[i]));
+                                sb.append(";"); //separate individual by ';'
+                            }
+                            sb.setLength(sb.length()-1); //remove last ",".
+                            sb.append("]");
+                            //unaffected geno in a family.
+                            if(controlFamilies.containsKey(caseFamily)){
+                                for(String n: controlFamilies.get(caseFamily)){
+                                    sb.append(";"); //separate individual by ';'
+                                    sb.append(n).append(":");
+                                    sb.append(getGenoAndCov(n, comDataMatrix[i]));
+                                }
+                            }
+                            sb.append(")");
+                            out.add(sb.toString());
+                            System.out.println(out.toString());
+                        }
+                    }
+                }
+            }
+        }
+        
+        /**
+         * VCF variant key, chr-pos-ref-alt.
+         * @param ss
+         * @return 
+         */
+        private static String getVariantkey(String[] ss){
+            StringJoiner sj = new StringJoiner("-");
+                sj.add(ss[0]);
+                sj.add(ss[1]);
+                sj.add(ss[3]);
+                sj.add(ss[4]);
+            return sj.toString();
+        }
+        
+        /**
+         * True if all non-altHomo. or altHomo on male X or Y. Otherwise false.
          * @param names
          * @param oneLineArr
          * @return 
@@ -611,15 +886,25 @@ public class ExomeModelFilterV2 {
         private static boolean checkAltHomo4Dom(List<String> caseNames, String[] oneLineArr){
             for (String name : caseNames) {
                 int index = nameIndexMap.get(name);
-                //skip missing and gender info missing individuals.
-                if(oneLineArr[index].charAt(0) == '.' || genderMap.get(name).equalsIgnoreCase("0")){
+                //skip missing
+                //if(oneLineArr[index].charAt(0) == '.' || genderMap.get(name).equalsIgnoreCase("0")){
+                if(oneLineArr[index].charAt(0) == '.'){
                     continue;
                 }
                 
                 if (oneLineArr[index].charAt(0) != '0' && oneLineArr[index].charAt(2) != '0') { //alt homo.
-                    //only permit male, X for alt-homo.
-                    if (! (oneLineArr[0].substring(oneLineArr[0].length()-1, oneLineArr[0].length()).equalsIgnoreCase("x")
-                            && genderMap.get(name).equalsIgnoreCase("1"))
+                    //alt homo not on X|Y chromosome.  return false.
+                    if(! (oneLineArr[0].substring(oneLineArr[0].length()-1, oneLineArr[0].length()).equalsIgnoreCase("x")
+                            || oneLineArr[0].substring(oneLineArr[0].length()-1, oneLineArr[0].length()).equalsIgnoreCase("y")
+                            )){
+                        return false;
+                    }
+                    
+                    //only permit male or gender missing, X|Y for alt-homo.
+                    if (! ((oneLineArr[0].substring(oneLineArr[0].length()-1, oneLineArr[0].length()).equalsIgnoreCase("x")
+                            || oneLineArr[0].substring(oneLineArr[0].length()-1, oneLineArr[0].length()).equalsIgnoreCase("y")
+                            )
+                            && (genderMap.get(name).equalsIgnoreCase("1") || genderMap.get(name).equalsIgnoreCase("0")))
                             ) {
                         return  false;
                     }
@@ -628,5 +913,51 @@ public class ExomeModelFilterV2 {
             
             return true;
         }
+        
+         private static void eshare(String[] oneLineArr){
+//            System.out.println("exome.ExomeModelFilterV2.dominantModel()");
+            String[] ss = oneLineArr;
+
+//            if(allRefHomoAllMissingTrue(ctrlNames, ss) == false){ 
+//                // pass this variants, unmet conditon 1.0.
+//                // remove family with all missing, or no alt allele.
+//            }else{
+                //check candiates families. all unaffectd individual at this site carring 00.
+                //candidate family genotype, and total of individal in these families, including unaffected.
+                int total = 0;   //total individuals in candidate family, only affected.
+                int hetCount = 0; //Number of indiviudal with het. genotype.
+                //List<String> candidateFamilies = new LinkedList<String>();
                 
+                StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
+                
+                for (String cfname :  caseFamilies.keySet()) {
+                    long [] re = estimateShareRate(caseFamilies.get(cfname), oneLineArr);
+                    if (re[0] >= 0) {
+                        hetCount += re[0];
+                        total += re[1];
+                    }
+                }
+             
+                //chr pos ref alt #candidateFamilies #averageSize #Genotypes
+                StringJoiner sj = new StringJoiner("\t");
+                sj.add(oneLineArr[0]);
+                sj.add(oneLineArr[1]);
+                sj.add(oneLineArr[3]);
+                sj.add(oneLineArr[4]);
+                
+                sj.add(Integer.toString(hetCount));
+                sj.add(Integer.toString(total));
+                
+                if (total > 0) {
+                    sj.add(formater.format(hetCount * 1.0 / total));
+                }else{
+                    sj.add("0");
+                }
+                
+                sj.add(cfGeno.toString());
+            
+                //output final results.
+                System.out.println(sj.toString());
+//            }
+        }
 }
