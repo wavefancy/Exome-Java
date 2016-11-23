@@ -116,7 +116,7 @@ public class ExomeModelFilterV2 {
 	
 	private static void help() {
 		System.out.println("--------------------------------");
-		System.out.println("    ExomeModelFilter    version: 2.4     Author:wavefancy@gmail.com");
+		System.out.println("    ExomeModelFilter    version: 2.4.1     Author:wavefancy@gmail.com");
 		System.out.println("--------------------------------");
 		System.out.println("Usages: \nparameter1: ped file."
 //				+ "\nparameter2(int): Column index for individual seq. starts(Inclusive)."
