@@ -74,6 +74,10 @@ import java.util.StringJoiner;
  *      Only use family with het. genotype. family with all ref-homo or at least 
  *      one alt-homo will be excluded.
  * 
+ * @version 2.5.3.
+ * 1. Add function for compound het. checking, requiring at least one candidate sites
+ *      in candidate site set with alt-homo genotype is zero general population.
+ * 
  * @author wallace
  *
  */
@@ -111,6 +115,12 @@ public class ExomeModelFilterV2 {
     // http://exac.broadinstitute.org/variant/19-6693069-A-G
     // chr15-62942342-G-A and chr15-62942343-C-A
     // http://exac.broadinstitute.org/variant/15-62942342-G-A
+    
+    // whether to check at least one candidate sites
+    // in candidate site set with alt-homo genotype is zero general population for compound het. model.
+    private static boolean altHomoChecking4CompundHet = false;
+    //chr-pos-ref-alt. -> altHomo genotye count. 
+    private static Map<String,String> variantAltHomoCountMap = new HashMap<>();
 
 	
 	public static void main(String[] args) {
@@ -129,6 +139,9 @@ public class ExomeModelFilterV2 {
                 break;
             case "-cmnp":
                 removeMNP = false;
+                break;
+            case "-c":
+                altHomoChecking4CompundHet = true;
                 break;
 			case "-mod":
 				i++;
@@ -164,7 +177,7 @@ public class ExomeModelFilterV2 {
 	
 	private static void help() {
 		System.out.println("--------------------------------");
-		System.out.println("    ExomeModelFilter    version: 2.5     Author:wavefancy@gmail.com");
+		System.out.println("    ExomeModelFilter    version: 2.5.3     Author:wavefancy@gmail.com");
 		System.out.println("--------------------------------");
 		System.out.println("Usages: \nparameter1: ped file."
 //				+ "\nparameter2(int): Column index for individual seq. starts(Inclusive)."
@@ -174,6 +187,9 @@ public class ExomeModelFilterV2 {
                 + "\n          eshare: estimate the rare variant sharing rate (currently version, only support auto-chromosome.)."
                 + "\nparameter(-m  int, optional): maxmium number of candidate families, (Default 5000, only for dom model, <=)."
                 + "\nparameter(-a file, optional, required for compound hetero.), gene annotation file."
+                + "\nparameter(-c, optional, only for compound hetero., default false) at least one candidate sites\n" +
+                  "         in candidate site set with alt-homo genotype is zero general population, "
+                + "         value 0 of 6th column in gene annotation file."
                 + "\nparameter(-cmnp, optional, only applicable for compound hetero.), close the function to remove MNP sites."
 				);
 		System.out.println("Notes:"
@@ -246,6 +262,15 @@ public class ExomeModelFilterV2 {
                                  sj.add(ss[i]);
                             }
                             geneAnnoMap.get(ss[4]).add(sj.toString());
+                            
+                            //althomo checking
+                            if (altHomoChecking4CompundHet) {
+                                if (variantAltHomoCountMap.containsKey(sj.toString())) {
+                                    System.err.println("WARN: duplicated annotaion for this site, only use the first entry: " + sj.toString());
+                                }else{
+                                    variantAltHomoCountMap.put(sj.toString(), ss[5]);
+                                }
+                            }
                         });
                 } catch (Exception ioException) {
                     System.err.println("ERROR: Can not find gene annotation file[-a]: " + geneAnnoFile);
@@ -766,6 +791,7 @@ public class ExomeModelFilterV2 {
             
             //checking compound hetero model.
             for (Map.Entry<String, List<String>> entry : geneAnnoMap.entrySet()) { // Iterate by gene.
+                //variant positions for a gene.
                 String gene = entry.getKey();
                 List<String> value = entry.getValue();
                 int[] vIndex =  value.stream()
@@ -821,6 +847,20 @@ public class ExomeModelFilterV2 {
                             }
                         }
                         passed = newpassed;
+                    }
+                    
+                    //althomo genotype checking, at least one site althomo count is zero.
+                    if (altHomoChecking4CompundHet) {
+                        boolean skip = true;
+                        for (int i : passed) {
+                            if (variantAltHomoCountMap.get(getVariantkey(comDataMatrix[i])).equalsIgnoreCase("0")) {
+                                skip = false;
+                                break;
+                            }
+                        }
+                        if (skip) {
+                            continue;
+                        }
                     }
                     
                     
@@ -927,10 +967,13 @@ public class ExomeModelFilterV2 {
                 int total = 0;   //total individuals in candidate family, only affected.
                 int hetCount = 0; //Number of indiviudal with het. genotype.
                 //List<String> candidateFamilies = new LinkedList<String>();
-                
-                StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
-                
+                 
                 for (String cfname :  caseFamilies.keySet()) {
+                    //all missing or no alt allele, do not need checking.
+                    if(allRefHomoAllMissingTrue(caseFamilies.get(cfname), oneLineArr)){
+                      continue;
+                      }
+                      
                     long [] re = estimateShareRate(caseFamilies.get(cfname), oneLineArr);
                     if (re[0] >= 0) {
                         hetCount += re[0];
@@ -938,6 +981,7 @@ public class ExomeModelFilterV2 {
                     }
                 }
              
+                StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
                 //chr pos ref alt #candidateFamilies #averageSize #Genotypes
                 StringJoiner sj = new StringJoiner("\t");
                 sj.add(oneLineArr[0]);
