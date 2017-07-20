@@ -931,6 +931,11 @@ public class ExomeModelFilterV2 {
                 StringJoiner cfGeno = new StringJoiner(","); //genotype and coverage info. for candidate family.
                 
                 for (String cfname :  caseFamilies.keySet()) {
+                    //all missing or no alt allele, do not need checking.
+                    if(allRefHomoAllMissingTrue(caseFamilies.get(cfname), oneLineArr)){
+                        continue;
+                    }
+                           
                     long [] re = estimateShareRate(caseFamilies.get(cfname), oneLineArr);
                     if (re[0] >= 0) {
                         hetCount += re[0];
