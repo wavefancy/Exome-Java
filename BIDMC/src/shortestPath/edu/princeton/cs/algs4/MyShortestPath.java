@@ -152,11 +152,9 @@ public class MyShortestPath {
             tempEdgesList.stream().forEach(s->{
                 int v = (int) geneNameMap.get(s[0]);
                 int w = (int) geneNameMap.get(s[1]);
-                double weight = Double.parseDouble(s[2]);
+                double weight = 1.0;
                 if (wWeight) {
                     weight = Double.parseDouble(s[2]);
-                }else{
-                    weight = 1.0;
                 }
                 Edge e = new Edge(v, w, weight);
                 G.addEdge(e);
@@ -177,7 +175,7 @@ public class MyShortestPath {
                     .toArray();
             
             //System.out.println(G.toString());
-            DecimalFormat decimalFormat = new DecimalFormat(".####");
+            DecimalFormat decimalFormat = new DecimalFormat("#.####");
             if(topGenes != null){
                 int[] topGeneIDs = Arrays.stream(topGenes)
                         .parallel()
