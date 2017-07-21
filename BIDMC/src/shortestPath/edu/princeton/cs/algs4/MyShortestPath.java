@@ -32,7 +32,7 @@ public class MyShortestPath {
     private final static Map<String,Integer> geneNameMap = new HashMap(); //map genename -> int number.
     private static int  tempIndex = 0;
 	
-    private static final String doc =
+    private static final String DOC =
                 "MyUndirectedWeightedShortestPath.\n"
                 + "\n"
                 + "Usage:\n"
@@ -90,7 +90,7 @@ public class MyShortestPath {
 
     public static void main(String[] args) {
             Map<String, Object> opts =
-                 new Docopt(doc).withVersion("MIXSCORE 3.7").parse(args);
+                 new Docopt(DOC).withVersion("1.1").parse(args);
 //		     System.err.println(opts);
             if(opts.get("-t") != null){
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
