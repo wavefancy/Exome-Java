@@ -20,6 +20,8 @@ import org.docopt.Docopt;
  * 
  * @version 1.0
  * Compute shortest path based on princeton's code base.
+ * http://algs4.cs.princeton.edu/44sp/
+ * all code on github: https://github.com/kevin-wayne/algs4
  * Compute the shortest path between nodes.
  *
  */
