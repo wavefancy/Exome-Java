@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.stream.IntStream;
 import org.docopt.Docopt;
 
@@ -40,9 +41,11 @@ public class MyShortestPath {
                 + "  MyUndirectedWeightedShortestPath --version\n"
                 + "\n"
                 + "---------------------------\n"
-                + "Read network from stdin, each line three columns: GeneA GeneB weight."
-                + "Compute the avarage shorest path from topGenes with knownGens. \n"
+                + "Read network from stdin, each line three columns: GeneA GeneB weight.\n"
+                + "If only two columns, all edges were assigned the equal weight of 1.\n"
+                + "Compute the avarage shorest path from topGenes with knownGenes. \n"
                 + "mean(min_i(KnownGenes), i iterate all topGenes.\n"
+                + "min_i: the minimal distance between topGene_i with all knownGenes."
                 + "---------------------------\n"
                 + "Options:\n"
                 + "  -k knownGene  Input known gene list, one line one gene.\n"
@@ -62,29 +65,27 @@ public class MyShortestPath {
      * @param G
      * @return 
      */
-    private static double averageMindistance(int[] testGeneIDs, int[] targetGeneIDs, EdgeWeightedGraph G){
-//        System.out.println(Arrays.toString(testGeneIDs));
-//        System.out.println(Arrays.toString(targetGeneIDs));
+    private static OptionalDouble averageMindistance(int[] testGeneIDs, int[] targetGeneIDs, EdgeWeightedGraph G){
+
         return Arrays.stream(testGeneIDs)
                         .parallel()
-//                        .mapToInt(s->{
-//                            return (int)geneNameMap.get(s);
-//                        })
                         .mapToDouble(s->{
                             //min(distance to all knwon genes.)
                             DijkstraUndirectedSP sp = new DijkstraUndirectedSP(G, s);
                             double[] minimalDis = Arrays.stream(targetGeneIDs)
-                                    //.filter(k->{return !sp.hasPathTo(k);})
+                                    .filter(k->{return sp.hasPathTo(k);})
                                     .mapToDouble(k->{
-//                                        System.out.println(s);
-//                                        System.out.println(s);
-//                                        System.out.println(sp.distTo(k));
                                         return sp.distTo(k);
                                     })
                                     .toArray();
-                            return Arrays.stream(minimalDis).min().getAsDouble();
+                            if (minimalDis.length >0) {
+                                return Arrays.stream(minimalDis).min().getAsDouble();
+                            }else{
+                                return -1;
+                            }
                         })
-                        .average().getAsDouble();
+                        .filter(s-> s>=0 )
+                        .average();
     }
 
     public static void main(String[] args) {
@@ -98,8 +99,8 @@ public class MyShortestPath {
             if(opts.get("-k") != null){
                 try {
                    knownGenes = Files.lines(Paths.get((String) opts.get("-k")))
-                        .filter(s -> s.length() <= '0')
-			.toArray(String[]::new);
+                        .filter(s -> s.length() > 0)
+                        .toArray(String[]::new);
                    
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -110,8 +111,8 @@ public class MyShortestPath {
             if(opts.get("-i") != null){
                 try {
                    topGenes = Files.lines(Paths.get((String) opts.get("-i")))
-                        .filter(s -> s.length() <= '0')
-			.toArray(String[]::new);
+                        .filter(s -> s.length() > 0)
+                        .toArray(String[]::new);
                    
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -125,11 +126,13 @@ public class MyShortestPath {
                 bootTimes = Integer.parseInt((String) opts.get("-b"));
             }
             
+//            System.out.println(Arrays.toString(topGenes));
+//            System.out.println(Arrays.toString(knownGenes));
             //read network from stdin.
             BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
             final LinkedList<String[]> tempEdgesList = new LinkedList();
             in.lines()
-              .filter(s -> s.length() <= '0')
+              .filter(s -> s.length() > 0)
               .forEach(s ->{
                   String[] ss = s.split("\\s+");
                   if (!geneNameMap.containsKey(ss[0])) {
@@ -141,7 +144,7 @@ public class MyShortestPath {
                   tempEdgesList.add(ss);
               });
             
-            //System.out.println(tempEdgesList);
+//            System.out.println(tempEdgesList);
             //build graph.
             EdgeWeightedGraph G = new EdgeWeightedGraph(geneNameMap.size());
             boolean withWeight = true;
@@ -191,8 +194,14 @@ public class MyShortestPath {
                         .toArray();
                 //System.out.println(Arrays.toString(knwonGeneIDs));
 //                System.out.println(Arrays.toString(topGeneIDs));
-                double results = averageMindistance(topGeneIDs, knwonGeneIDs, G);
-                System.out.println(decimalFormat.format(results));
+                OptionalDouble results = averageMindistance(topGeneIDs, knwonGeneIDs, G);
+                //System.out.println(decimalFormat.format(results));
+                if (results.isPresent()) {
+                    System.out.println(decimalFormat.format(results.getAsDouble()));
+                }else{
+                    System.out.println("NA");
+                }
+                
                 System.exit(0);
             }
             
@@ -203,6 +212,7 @@ public class MyShortestPath {
                     .map(e->e.toString())
                     .filter(s->!knownSet.contains(s))
                     .toArray(String[]::new);
+//            System.out.println(Arrays.toString(candidateGenes));
             
             if (bootTimes>0 && RandomPickGenes>0) {
                 //number of bootstrap.
@@ -213,7 +223,15 @@ public class MyShortestPath {
                                     .stream()
                                     .mapToInt(e->geneNameMap.get(e))
                                     .toArray();
-                            System.out.println(decimalFormat.format(averageMindistance(randomGenes, knwonGeneIDs, G)));
+                            
+                            //System.out.println(decimalFormat.format(averageMindistance(randomGenes, knwonGeneIDs, G)));
+                            OptionalDouble results = averageMindistance(randomGenes, knwonGeneIDs, G);
+                            //System.out.println(decimalFormat.format(results));
+                            if (results.isPresent()) {
+                                System.out.println(decimalFormat.format(results.getAsDouble()));
+                            }else{
+                                System.out.println("NA");
+                            }
                         });
             }
     }
