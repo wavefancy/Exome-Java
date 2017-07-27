@@ -37,12 +37,16 @@ public class MyShortestPath {
     private final static Map<String,Integer> geneNameMap = new HashMap(); //map genename -> int number.
     private static int  tempIndex = 0;
     private static int outputClosestNKnownGenes = -1; //output closest N knownGene for each topGenes.
+    private static String TASK = "";
+    private final static HashMap<Integer,String> reverseIDNameMap = new HashMap<>(geneNameMap.size());
+    private static final DecimalFormat decimalFormat = new DecimalFormat("#.####");
+    
 	
     private static final String DOC =
                 "MyUndirectedWeightedShortestPath.\n"
                 + "\n"
                 + "Usage:\n"
-                + "  MyUndirectedWeightedShortestPath -k knownGene (-i topGenes [-c int] | -r int -b int) [-t cpus] \n"
+                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | -r int -b int | [--task string] [-g gene]) [-t cpus] \n"
                 + "  MyUndirectedWeightedShortestPath (-h | --help)\n"
                 + "  MyUndirectedWeightedShortestPath --version\n"
                 + "\n"
@@ -55,6 +59,9 @@ public class MyShortestPath {
                 + "---------------------------\n"
                 + "\n"
                 + "Options:\n"
+                + "  --task string Assign the task want this program to do!\n"
+                + "                 path: use with -g\n"
+                + "  -g gene       Two gene names, output the path from gene A to gene B. input example: A,B \n"
                 + "  -k knownGene  Input known gene list, one line one gene.\n"
                 + "  -i topGenes   Input top gene list, one line one gene.\n"
                 + "  -c int        Output the closest [int] knownGenes for each topGenes.\n"
@@ -147,7 +154,7 @@ public class MyShortestPath {
 
     public static void main(String[] args) {
             Map<String, Object> opts =
-                 new Docopt(DOC).withVersion("1.2").parse(args);
+                 new Docopt(DOC).withVersion("1.3").parse(args);
 //		     System.err.println(opts);
             if(opts.get("-t") != null){
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
@@ -189,6 +196,9 @@ public class MyShortestPath {
             if(opts.get("-b") != null){
                 bootTimes = Integer.parseInt((String) opts.get("-b"));
             }
+            if(opts.get("--task") != null){
+                TASK = (String) opts.get("--task");
+            }
             
 //            System.out.println(Arrays.toString(topGenes));
 //            System.out.println(Arrays.toString(knownGenes));
@@ -228,6 +238,56 @@ public class MyShortestPath {
             });
             tempEdgesList.clear();
             
+            for (Map.Entry<String, Integer> entry : geneNameMap.entrySet()) {
+                String key = entry.getKey();
+                Integer value = entry.getValue();
+                reverseIDNameMap.put(value, key);
+            }
+            
+            //perform different tasks from here.
+            if (TASK.equalsIgnoreCase("path")) {
+                String[] genes = null;
+                if(opts.get("-g") != null){
+                    genes = ((String) opts.get("-g")).split(",");
+                }else{
+                    System.out.println("ERROR: TASK 'path' should be work with option '-g!");
+                    System.exit(-1);
+                }
+                
+                boolean chxError = false;
+                for (String gene : genes) {
+                    if (!geneNameMap.containsKey(gene)) {
+                        System.err.println("ERROR: can not find this node in network: " + gene);
+                        chxError = true;
+                    }
+                }
+                if (chxError) {
+                    System.exit(-1);
+                }
+               
+                int[] gIDs = Arrays.stream(genes)
+                        .mapToInt(s->{
+                            return geneNameMap.get(s);
+                        })
+                        .toArray();
+                
+                DijkstraUndirectedSP sp = new DijkstraUndirectedSP(G, gIDs[0]);
+                StringBuilder sb = new StringBuilder();
+                if (sp.hasPathTo(gIDs[1])) {
+                    Iterable<Edge> edges = sp.pathTo(gIDs[1]);
+                    for (Edge edge : edges) {
+                        sb.setLength(0);
+                        sb.append(reverseIDNameMap.get(edge.either())).append("\t");
+                        sb.append(reverseIDNameMap.get(edge.other(edge.either()))).append("\t");
+                        sb.append(decimalFormat.format(edge.weight()));
+                        System.out.println(sb.toString());
+                    }
+                }else{
+                    System.err.println("There is no path between:" + Arrays.toString(genes));
+                }
+                System.exit(-1);
+            }
+            
             //compute the distance with knwon genes
             final int[] knwonGeneIDs = Arrays.stream(knownGenes)
                      .mapToInt(s->{
@@ -242,7 +302,6 @@ public class MyShortestPath {
                     .toArray();
             
             //System.out.println(G.toString());
-            DecimalFormat decimalFormat = new DecimalFormat("#.####");
             if(topGenes != null){
                 int[] topGeneIDs = Arrays.stream(topGenes)
                         .parallel()
@@ -270,13 +329,6 @@ public class MyShortestPath {
 
                    
                 }else{ //output the closest top n known genes for each top genes.
-//                    System.out.println(outputClosestNKnownGenes);
-                    final HashMap<Integer,String> reverseIDNameMap = new HashMap<>(geneNameMap.size());
-                    for (Map.Entry<String, Integer> entry : geneNameMap.entrySet()) {
-                        String key = entry.getKey();
-                        Integer value = entry.getValue();
-                        reverseIDNameMap.put(value, key);
-                    }
                     
 //                    System.out.println(outputClosestNKnownGenes);
 //                    System.out.println("shortestPath.edu.princeton.cs.algs4.MyShortestPath.main()");
