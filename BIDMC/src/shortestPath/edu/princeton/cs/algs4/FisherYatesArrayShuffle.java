@@ -37,12 +37,18 @@ public class FisherYatesArrayShuffle {
     
     /**
      * Random pick length elements from an input array(inArr), length <= inArr.length - 1.
+     * Thread saft, only one thread can access this code at a particuar time point.
      * @param inArr
      * @param length
      * @return 
      */
-    public static List<String> Shuffle(String[] inArr, int length){
+    public static synchronized List<String> Shuffle(String[] inArr, int length){
         ThreadLocalRandom random = ThreadLocalRandom.current();
+        if (length >= inArr.length) {
+            System.err.println("ERROR IN: shortestPath.edu.princeton.cs.algs4.FisherYatesArrayShuffle.Shuffle()");
+            System.err.println("new list should be as less or equal length as input array.");
+            System.exit(-1);
+        }
         for (int i = 0; i < inArr.length; i++) {
             int index = random.nextInt(i,inArr.length);
             String t = inArr[i];
@@ -53,8 +59,8 @@ public class FisherYatesArrayShuffle {
             }
         }
         
-        return  Arrays.asList(inArr).subList(0, length);
-        //return Arrays.copyOf(inArr, length);
+        //return  Arrays.asList(inArr).subList(0, length).toArray();
+        return Arrays.asList(Arrays.copyOf(inArr, length));
     }
    
 

@@ -21,7 +21,7 @@ import org.docopt.Docopt;
  * 
  * @author wavefancy@gmail.com
  * 
- * @version 1.2
+ * @version 1.4
  * Compute shortest path based on princeton's code base.
  * http://algs4.cs.princeton.edu/44sp/
  * all code on github: https://github.com/kevin-wayne/algs4
@@ -46,7 +46,7 @@ public class MyShortestPath {
                 "MyUndirectedWeightedShortestPath.\n"
                 + "\n"
                 + "Usage:\n"
-                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | -r int -b int | [--task string] [-g gene]) [-t cpus] \n"
+                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] \n"
                 + "  MyUndirectedWeightedShortestPath (-h | --help)\n"
                 + "  MyUndirectedWeightedShortestPath --version\n"
                 + "\n"
@@ -61,6 +61,10 @@ public class MyShortestPath {
                 + "Options:\n"
                 + "  --task string Assign the task want this program to do!\n"
                 + "                 path: use with -g\n"
+                + "                 proportion: use with -k -b -r and -p, pick -r number of genes and bootstrap -b time.\n"
+                + "                     Compute the proportion of times for each knwon gene, \n"
+                + "                     which can be ranked to the top -p closest genes amoung all the query genes.\n"
+                + "  -p int        The number of top genes to pick for task 'proportion'\n"
                 + "  -g gene       Two gene names, output the path from gene A to gene B. input example: A,B \n"
                 + "  -k knownGene  Input known gene list, one line one gene.\n"
                 + "  -i topGenes   Input top gene list, one line one gene.\n"
@@ -75,6 +79,7 @@ public class MyShortestPath {
     /**
      * Get the average min distance between testGeneIDs with targetGeneIDs.
      * Average(min(test_i_ShortestDistanceToAllTargetGenes), iterate i))
+     * This function will be run in parallel model.
      * @param testGeneIDs
      * @param targetGeneIDs
      * @param G
@@ -108,7 +113,7 @@ public class MyShortestPath {
      * @param testGeneID
      * @param targetGeneIDs
      * @param G
-     * @return 
+     * @return list of ranked gene distance and geneIDs, ranked by distance to testGeneID.
      */
     private static List sortedDistanceAndID(int testGeneID, int [] targetGeneIDs, EdgeWeightedGraph G){
         DijkstraUndirectedSP sp = new DijkstraUndirectedSP(G, testGeneID);
@@ -133,6 +138,7 @@ public class MyShortestPath {
             results[i] = r;
         }
         
+        //rank by distance.
         List<double[]> reList = Arrays.asList(results);
         Collections.sort(reList,new Comparator<double[]>(){
                     public int compare(double[] i, double[] j){
@@ -151,10 +157,49 @@ public class MyShortestPath {
 //        }
         return reList;
     }
+    
+    
+    /**
+     * Compute the proportion of times for each known which were ranked as topN closest genes 
+     * for each query gene among all query genes. 
+     * @param geneIDs
+     * @param topN 
+     */
+    private static void outputProportion(int[] geneIDs, final int topN, EdgeWeightedGraph G){
+        final HashMap<Integer, Integer> knownGeneCountMap = new HashMap<>(knownGenes.length);
+        Arrays.stream(knownGenes)
+              .mapToInt(k->geneNameMap.get(k))
+              .forEach(k->{
+                  knownGeneCountMap.put(k, 0);
+              });
+                            
+        int[] knownGeneIDs = Arrays.stream(knownGenes).mapToInt(k->geneNameMap.get(k)).toArray();
+
+        Arrays.stream(geneIDs)
+                .forEach(i->{
+                   List<double[]> re = sortedDistanceAndID(i, knownGeneIDs, G);
+                   for (int j = 0; j < topN; j++) {
+                       int id = (int) re.get(j)[1];
+                       knownGeneCountMap.put(id, knownGeneCountMap.get(id) + 1);
+                   }
+                });
+        //Arrays.stream(geneIDs).mapToObj(s->reverseIDNameMap.get(s)).forEach(s->System.out.println(s));
+        //System.out.println(knownGeneCountMap);
+        //output resutls.
+        StringBuilder sb = new  StringBuilder();
+        for (Map.Entry<Integer, Integer> entry : knownGeneCountMap.entrySet()) {
+            Integer key = entry.getKey();
+            Integer value = entry.getValue();
+            sb.setLength(0);
+            sb.append(reverseIDNameMap.get(key)).append("\t");
+            sb.append(decimalFormat.format(value * 1.0 / geneIDs.length));
+            System.out.println(sb.toString());
+        }
+    }
 
     public static void main(String[] args) {
             Map<String, Object> opts =
-                 new Docopt(DOC).withVersion("1.3").parse(args);
+                 new Docopt(DOC).withVersion("1.4").parse(args);
 //		     System.err.println(opts);
             if(opts.get("-t") != null){
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
@@ -285,6 +330,54 @@ public class MyShortestPath {
                 }else{
                     System.err.println("There is no path between:" + Arrays.toString(genes));
                 }
+                System.exit(-1);
+            }
+            
+            //Compute the proportion of times for each knwon gene, "
+            //   which can be ranked to the top -p closest genes amoung all the query genes."
+            if(TASK.equalsIgnoreCase("proportion")){
+                int temp = -1;
+                if(opts.get("-p") != null){
+                    temp = Integer.parseInt((String) opts.get("-p"));
+                }else{
+                    System.out.println("ERROR: TASK 'proportion' should be work with option '-p!");
+                    System.exit(-1);
+                }
+                final int topN = temp;
+                if (knownGenes == null) {
+                    System.out.println("ERROR: TASK 'proportion' should be work with option '-k!");
+                    System.exit(-1);
+                }
+                if (bootTimes <=0) {
+                    System.out.println("ERROR: TASK 'proportion' should be work with option '-b!");
+                    System.exit(-1);
+                }
+                if (RandomPickGenes <= 0) {
+                    System.out.println("ERROR: TASK 'proportion' should be work with option '-r!");
+                    System.exit(-1);
+                }
+                
+                //compute bootstrapping values.
+                //candidate gene list, do not including known genes.
+                HashSet<String> knownSet = new HashSet(Arrays.asList(knownGenes));
+                String[] candidateGenes = geneNameMap.keySet().stream()
+                        .map(e->e.toString())
+                        .filter(s->!knownSet.contains(s))
+                        .toArray(String[]::new);
+                
+                //bootstrap for compute proportion:
+                IntStream.range(0, bootTimes)
+                        .parallel()
+                        //.sequential()
+                        .forEach(s->{
+                            int[] randomGeneIDs = FisherYatesArrayShuffle.Shuffle(candidateGenes, RandomPickGenes)
+                                    .stream()
+                                    .mapToInt(e->geneNameMap.get(e))
+                                    .toArray();
+                            //System.out.println(Arrays.toString(randomGeneIDs));
+                            //output porportion.
+                            outputProportion(randomGeneIDs, topN, G);
+                        });
                 System.exit(-1);
             }
             
