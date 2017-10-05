@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -152,9 +153,9 @@ public class MyShortestPath {
                         }
                     }
                 });
-//        for (double[] ds : reList) {
-//            System.out.println(Arrays.toString(ds));
-//        }
+        for (double[] ds : reList) {
+            System.out.println(Arrays.toString(ds));
+        }
         return reList;
     }
     
@@ -178,12 +179,13 @@ public class MyShortestPath {
         Arrays.stream(geneIDs)
                 .forEach(i->{
                    List<double[]> re = sortedDistanceAndID(i, knownGeneIDs, G);
+                   
                    for (int j = 0; j < topN; j++) {
                        int id = (int) re.get(j)[1];
                        knownGeneCountMap.put(id, knownGeneCountMap.get(id) + 1);
                    }
                 });
-        //Arrays.stream(geneIDs).mapToObj(s->reverseIDNameMap.get(s)).forEach(s->System.out.println(s));
+        Arrays.stream(geneIDs).mapToObj(s->reverseIDNameMap.get(s)).forEach(s->System.out.println(s));
         //System.out.println(knownGeneCountMap);
         //output resutls.
         StringBuilder sb = new  StringBuilder();
@@ -204,30 +206,7 @@ public class MyShortestPath {
             if(opts.get("-t") != null){
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
             }
-            //read knwon genes.
-            if(opts.get("-k") != null){
-                try {
-                   knownGenes = Files.lines(Paths.get((String) opts.get("-k")))
-                        .filter(s -> s.length() > 0)
-                        .toArray(String[]::new);
-                   
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    System.exit(-1);
-                }
-            }
-            //read top genes
-            if(opts.get("-i") != null){
-                try {
-                   topGenes = Files.lines(Paths.get((String) opts.get("-i")))
-                        .filter(s -> s.length() > 0)
-                        .toArray(String[]::new);
-                   
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    System.exit(-1);
-                }
-            }
+            
             if(opts.get("-c") != null){
                 outputClosestNKnownGenes = Integer.parseInt((String) opts.get("-c"));
                 if(topGenes == null){
@@ -262,6 +241,54 @@ public class MyShortestPath {
                   }
                   tempEdgesList.add(ss);
               });
+            
+            //read knwon genes.
+            if(opts.get("-k") != null){
+                try {
+                   knownGenes = Files.lines(Paths.get((String) opts.get("-k")))
+                        .filter(s -> s.length() > 0)
+                        .toArray(String[]::new);
+                   
+                   //checking whether in network.
+                   boolean error = false;
+                   for (String string: knownGenes) {
+                        if (!geneNameMap.containsKey(string)) {
+                            System.err.println("Can not find this knownGenes in graph: " + string);
+                            error = true;
+                        }
+                   }
+                    if (error) {
+                        System.exit(-1);
+                    }
+                   
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    System.exit(-1);
+                }
+            }
+            //read top genes
+            if(opts.get("-i") != null){
+                try {
+                   topGenes = Files.lines(Paths.get((String) opts.get("-i")))
+                        .filter(s -> s.length() > 0)
+                        .toArray(String[]::new);
+                   
+                   boolean error = false;
+                   for (String string: topGenes) {
+                        if (!geneNameMap.containsKey(string)) {
+                            System.err.println("Can not find this topGenes in graph: " + string);
+                            error = true;
+                        }
+                   }
+                   if (error) {
+                        System.exit(-1);
+                   }
+                   
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    System.exit(-1);
+                }
+            }
             
 //            System.out.println(tempEdgesList);
             //build graph.
