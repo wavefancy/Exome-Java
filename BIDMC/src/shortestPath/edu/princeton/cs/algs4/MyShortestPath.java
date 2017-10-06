@@ -10,13 +10,13 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.stream.IntStream;
 import org.docopt.Docopt;
+
 
 /**
  * 
@@ -41,13 +41,14 @@ public class MyShortestPath {
     private static String TASK = "";
     private final static HashMap<Integer,String> reverseIDNameMap = new HashMap<>(geneNameMap.size());
     private static final DecimalFormat decimalFormat = new DecimalFormat("#.####");
+    private static final HashMap<String, Integer> GENELENGTH_MAP = new  HashMap<>();
     
 	
     private static final String DOC =
                 "MyUndirectedWeightedShortestPath.\n"
                 + "\n"
                 + "Usage:\n"
-                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] \n"
+                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] [-l file] \n"
                 + "  MyUndirectedWeightedShortestPath (-h | --help)\n"
                 + "  MyUndirectedWeightedShortestPath --version\n"
                 + "\n"
@@ -68,6 +69,7 @@ public class MyShortestPath {
                 + "  -p int        The number of top genes to pick for task 'proportion'\n"
                 + "  -g gene       Two gene names, output the path from gene A to gene B. input example: A,B \n"
                 + "  -k knownGene  Input known gene list, one line one gene.\n"
+                + "  -l file       Gene length annotation file. Output total gene length of top/random gene set.Two columns: geneName, length.\n"
                 + "  -i topGenes   Input top gene list, one line one gene.\n"
                 + "  -c int        Output the closest [int] knownGenes for each topGenes.\n"
                 + "  -r int        Number of random picked genes for bootstrapping.\n"
@@ -201,7 +203,7 @@ public class MyShortestPath {
 
     public static void main(String[] args) {
             Map<String, Object> opts =
-                 new Docopt(DOC).withVersion("1.4").parse(args);
+                 new Docopt(DOC).withVersion("1.5").parse(args);
 //		     System.err.println(opts);
             if(opts.get("-t") != null){
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
@@ -231,6 +233,7 @@ public class MyShortestPath {
             final LinkedList<String[]> tempEdgesList = new LinkedList();
             in.lines()
               .filter(s -> s.length() > 0)
+              .sequential() //*** Very Important **** Here must to be sequential, because we will update index.
               .forEach(s ->{
                   String[] ss = s.split("\\s+");
                   if (!geneNameMap.containsKey(ss[0])) {
@@ -284,6 +287,22 @@ public class MyShortestPath {
                         System.exit(-1);
                    }
                    
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    System.exit(-1);
+                }
+            }
+            //read gene length annotation. 
+            if(opts.get("-l") != null){
+                try {
+                   Files.lines(Paths.get((String) opts.get("-l")))
+                        .filter(s -> s.length() > 0)
+                        .forEach(s->{
+                            String[] ss = s.split("\\s+");
+                            
+                            GENELENGTH_MAP.put(ss[0], Integer.valueOf(ss[1]));
+                        });
+                    
                 } catch (Exception e) {
                     e.printStackTrace();
                     System.exit(-1);
@@ -441,6 +460,16 @@ public class MyShortestPath {
                 if (outputClosestNKnownGenes <= 0) {
                      OptionalDouble results = averageMindistance(topGeneIDs, knwonGeneIDs, G);
                     //System.out.println(decimalFormat.format(results));
+                    //collect total gene length.
+                    if (GENELENGTH_MAP.size()>0) {
+                        int totalLen = Arrays.stream(topGeneIDs)
+                            .mapToObj(x->reverseIDNameMap.get(x))
+                            .mapToInt(x->GENELENGTH_MAP.get(x))
+                            .sum();
+                        System.out.print(Integer.toString(totalLen) + "\t");
+                    }
+                    
+                    
                     if (results.isPresent()) {
                         System.out.println(decimalFormat.format(results.getAsDouble()));
                     }else{
@@ -502,6 +531,14 @@ public class MyShortestPath {
                             //System.out.println(decimalFormat.format(averageMindistance(randomGenes, knwonGeneIDs, G)));
                             OptionalDouble results = averageMindistance(randomGenes, knwonGeneIDs, G);
                             //System.out.println(decimalFormat.format(results));
+                            if (GENELENGTH_MAP.size()>0) {
+                                int totalLen = Arrays.stream(randomGenes)
+                                    .mapToObj(x->reverseIDNameMap.get(x))
+                                    .mapToInt(x->GENELENGTH_MAP.get(x))
+                                    .sum();
+                                System.out.print(Integer.toString(totalLen) + "\t");
+                            }
+                            
                             if (results.isPresent()) {
                                 System.out.println(decimalFormat.format(results.getAsDouble()));
                             }else{
