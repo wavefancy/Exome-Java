@@ -48,7 +48,7 @@ public class MyShortestPath {
                 "MyUndirectedWeightedShortestPath.\n"
                 + "\n"
                 + "Usage:\n"
-                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] [-l file] \n"
+                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] [-l file] [-n] \n"
                 + "  MyUndirectedWeightedShortestPath (-h | --help)\n"
                 + "  MyUndirectedWeightedShortestPath --version\n"
                 + "\n"
@@ -74,6 +74,7 @@ public class MyShortestPath {
                 + "  -c int        Output the closest [int] knownGenes for each topGenes.\n"
                 + "  -r int        Number of random picked genes for bootstrapping.\n"
                 + "  -b int        Number of bootstrappings.\n"
+                + "  -n            Output the gene name list for bootstrapping, in the first -r columns.\n"
                 + "  -t cpus       Number of cpus for computing.\n"
                 + "  -h --help     Show this screen.\n"
                 + "  --version     Show version.\n"
@@ -225,6 +226,12 @@ public class MyShortestPath {
             if(opts.get("--task") != null){
                 TASK = (String) opts.get("--task");
             }
+            
+            boolean T_OUTPUTBOOTGENELIST = false;
+            if(opts.get("-n") != null){
+                T_OUTPUTBOOTGENELIST = true;
+            }
+            final boolean OUTPUTBOOTGENELIST = T_OUTPUTBOOTGENELIST;
             
 //            System.out.println(Arrays.toString(topGenes));
 //            System.out.println(Arrays.toString(knownGenes));
@@ -530,6 +537,13 @@ public class MyShortestPath {
                             
                             //System.out.println(decimalFormat.format(averageMindistance(randomGenes, knwonGeneIDs, G)));
                             OptionalDouble results = averageMindistance(randomGenes, knwonGeneIDs, G);
+                            
+                            if (OUTPUTBOOTGENELIST){
+                                for (int rg : randomGenes) {
+                                    System.out.print(reverseIDNameMap.get(rg) + "\t");
+                                }
+                            }
+                            
                             //System.out.println(decimalFormat.format(results));
                             if (GENELENGTH_MAP.size()>0) {
                                 int totalLen = Arrays.stream(randomGenes)
