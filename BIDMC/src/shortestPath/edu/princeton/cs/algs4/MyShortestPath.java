@@ -42,7 +42,7 @@ public class MyShortestPath {
     private final static HashMap<Integer,String> reverseIDNameMap = new HashMap<>(geneNameMap.size());
     private static final DecimalFormat decimalFormat = new DecimalFormat("#.####");
     private static final HashMap<String, Integer> GENELENGTH_MAP = new  HashMap<>();
-    
+    private static final int PENALTY4NOCONNECTION = 1000;
 	
     private static final String DOC =
                 "MyUndirectedWeightedShortestPath.\n"
@@ -97,18 +97,23 @@ public class MyShortestPath {
                             //min(distance to all knwon genes.)
                             DijkstraUndirectedSP sp = new DijkstraUndirectedSP(G, s);
                             double[] minimalDis = Arrays.stream(targetGeneIDs)
-                                    .filter(k->{return sp.hasPathTo(k);})
+//                                    .filter(k->{return sp.hasPathTo(k);})
                                     .mapToDouble(k->{
-                                        return sp.distTo(k);
+                                        if(sp.hasPathTo(k)){
+                                            return sp.distTo(k);
+                                        }else{
+                                            return PENALTY4NOCONNECTION;
+                                        }
                                     })
                                     .toArray();
-                            if (minimalDis.length >0) {
-                                return Arrays.stream(minimalDis).min().getAsDouble();
-                            }else{
-                                return -1;
-                            }
+//                            if (minimalDis.length >0) {
+//                                return Arrays.stream(minimalDis).min().getAsDouble();
+//                            }else{
+//                                return -1;
+//                            }
+                            return Arrays.stream(minimalDis).min().getAsDouble(); //min distance to any target gene.
                         })
-                        .filter(s-> s>=0 )
+//                        .filter(s-> s>=0 )
                         .average();
     }
     
