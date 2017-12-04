@@ -240,6 +240,7 @@ public class MyShortestPath {
             
 //            System.out.println(Arrays.toString(topGenes));
 //            System.out.println(Arrays.toString(knownGenes));
+
             //read network from stdin.
             BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
             final LinkedList<String[]> tempEdgesList = new LinkedList();
@@ -466,11 +467,11 @@ public class MyShortestPath {
                             return (int)t;
                         })
                         .toArray();
-                //System.out.println(Arrays.toString(knwonGeneIDs));
-//                System.out.println(Arrays.toString(topGeneIDs));
-//                System.out.println(outputClosestNKnownGenes);
+
+                //output the distance between top genes and known genes.
                 if (outputClosestNKnownGenes <= 0) {
-                     OptionalDouble results = averageMindistance(topGeneIDs, knwonGeneIDs, G);
+                    
+                    OptionalDouble results = averageMindistance(topGeneIDs, knwonGeneIDs, G);
                     //System.out.println(decimalFormat.format(results));
                     //collect total gene length.
                     if (GENELENGTH_MAP.size()>0) {
@@ -530,6 +531,7 @@ public class MyShortestPath {
                     .toArray(String[]::new);
 //            System.out.println(Arrays.toString(candidateGenes));
             
+            // For random bootstap.
             if (bootTimes>0 && RandomPickGenes>0) {
                 //number of bootstrap.
                 IntStream.range(0, bootTimes)
@@ -553,7 +555,15 @@ public class MyShortestPath {
                             if (GENELENGTH_MAP.size()>0) {
                                 int totalLen = Arrays.stream(randomGenes)
                                     .mapToObj(x->reverseIDNameMap.get(x))
-                                    .mapToInt(x->GENELENGTH_MAP.get(x))
+                                    .mapToInt(x->{
+                                        if(GENELENGTH_MAP.get(x) == null){
+                                            System.err.println("ERROR: Can not find length annotation for gene: " + x);
+                                            System.exit(-1);
+                                            return -1;
+                                        }else{
+                                            return GENELENGTH_MAP.get(x);
+                                        }
+                                    })
                                     .sum();
                                 System.out.print(Integer.toString(totalLen) + "\t");
                             }
