@@ -167,9 +167,9 @@ public class MyShortestPath {
                         }
                     }
                 });
-        for (double[] ds : reList) {
-            System.out.println(Arrays.toString(ds));
-        }
+//        for (double[] ds : reList) {
+//            System.out.println(Arrays.toString(ds));
+//        }
         return reList;
     }
     
@@ -221,13 +221,6 @@ public class MyShortestPath {
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
             }
             
-            if(opts.get("-c") != null){
-                outputClosestNKnownGenes = Integer.parseInt((String) opts.get("-c"));
-                if(topGenes == null){
-                    System.err.println("ERROR: -c option must be used in combination with -i option!");
-                    System.exit(-1);
-                }
-            }
             if(opts.get("-r") != null){
                 RandomPickGenes = Integer.parseInt((String) opts.get("-r"));
             }
@@ -319,6 +312,14 @@ public class MyShortestPath {
                    
                 } catch (Exception e) {
                     e.printStackTrace();
+                    System.exit(-1);
+                }
+            }
+            //set this after -c.
+            if(opts.get("-c") != null){
+                outputClosestNKnownGenes = Integer.parseInt((String) opts.get("-c"));
+                if(topGenes == null){
+                    System.err.println("ERROR: -c option must be used in combination with -i option!");
                     System.exit(-1);
                 }
             }
