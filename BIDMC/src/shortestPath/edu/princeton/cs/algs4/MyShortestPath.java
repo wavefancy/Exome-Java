@@ -22,7 +22,7 @@ import org.docopt.Docopt;
  * 
  * @author wavefancy@gmail.com
  * 
- * @version 1.4
+ * @version 1.7
  * Compute shortest path based on princeton's code base.
  * http://algs4.cs.princeton.edu/44sp/
  * all code on github: https://github.com/kevin-wayne/algs4
@@ -42,13 +42,14 @@ public class MyShortestPath {
     private final static HashMap<Integer,String> reverseIDNameMap = new HashMap<>(geneNameMap.size());
     private static final DecimalFormat decimalFormat = new DecimalFormat("#.####");
     private static final HashMap<String, Integer> GENELENGTH_MAP = new  HashMap<>();
-    private static final int PENALTY4NOCONNECTION = 1000;
+    private static double PENALTY4NOCONNECTION = 1000.0;
+    private static boolean OUTPUTMATCHMIN = false; //output the minal value of gene with all_known_genes, to stdout.
 	
     private static final String DOC =
                 "MyUndirectedWeightedShortestPath.\n"
                 + "\n"
                 + "Usage:\n"
-                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] [-l file] [-n] \n"
+                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] [-l file] [-n] [--omatchmin] [--penalty f] \n"
                 + "  MyUndirectedWeightedShortestPath (-h | --help)\n"
                 + "  MyUndirectedWeightedShortestPath --version\n"
                 + "\n"
@@ -56,7 +57,7 @@ public class MyShortestPath {
                 + "Read network from stdin, each line three columns: GeneA GeneB weight.\n"
                 + "If only two columns, all edges were assigned the equal weight of 1.\n"
                 + "Compute the avarage shorest path from topGenes with knownGenes. \n"
-                + "mean(min_i(KnownGenes), i iterate all topGenes.\n"
+                + "mean(min_i(KnownGenes)), i iterate all topGenes.\n"
                 + "min_i: the minimal distance between topGene_i with all knownGenes.\n"
                 + "---------------------------\n"
                 + "\n"
@@ -75,6 +76,8 @@ public class MyShortestPath {
                 + "  -r int        Number of random picked genes for bootstrapping.\n"
                 + "  -b int        Number of bootstrappings.\n"
                 + "  -n            Output the gene name list for bootstrapping, in the first -r columns.\n"
+                + "  --penalty f  Set the penality for no connection between 2 genes, default 1000.0.\n"
+                + "  --omatchmin   Output the min value of a gene with known genes to stderr, default no output.\n"
                 + "  -t cpus       Number of cpus for computing.\n"
                 + "  -h --help     Show this screen.\n"
                 + "  --version     Show version.\n"
@@ -111,9 +114,12 @@ public class MyShortestPath {
 //                            }else{
 //                                return -1;
 //                            }
-                            return Arrays.stream(minimalDis).min().getAsDouble(); //min distance to any target gene.
+                            double re = Arrays.stream(minimalDis).min().getAsDouble();
+                            if (OUTPUTMATCHMIN) {
+                                System.err.println(reverseIDNameMap.get(s)+"\t" + decimalFormat.format(re));
+                            }
+                            return re; //min distance to any target gene.
                         })
-//                        .filter(s-> s>=0 )
                         .average();
     }
     
@@ -209,7 +215,7 @@ public class MyShortestPath {
 
     public static void main(String[] args) {
             Map<String, Object> opts =
-                 new Docopt(DOC).withVersion("1.5").parse(args);
+                 new Docopt(DOC).withVersion("1.7").parse(args);
 //		     System.err.println(opts);
             if(opts.get("-t") != null){
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
@@ -231,7 +237,18 @@ public class MyShortestPath {
             if(opts.get("--task") != null){
                 TASK = (String) opts.get("--task");
             }
+            //set the penalty if no connection between two genes.
+            if(opts.get("--penalty") != null){
+                PENALTY4NOCONNECTION = Double.parseDouble((String)opts.get("--penalty"));
+            }
+            //output the minvalue of a gene with known genes.
+            if(opts.get("--omatchmin") != null){
+                OUTPUTMATCHMIN = true;
+            }
             
+            
+            
+      
             boolean T_OUTPUTBOOTGENELIST = false;
             if(opts.get("-n") != null){
                 T_OUTPUTBOOTGENELIST = true;
