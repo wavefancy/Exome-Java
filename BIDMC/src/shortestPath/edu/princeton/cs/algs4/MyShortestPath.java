@@ -22,7 +22,7 @@ import org.docopt.Docopt;
  * 
  * @author wavefancy@gmail.com
  * 
- * @version 1.7
+ * @version 1.8
  * Compute shortest path based on princeton's code base.
  * http://algs4.cs.princeton.edu/44sp/
  * all code on github: https://github.com/kevin-wayne/algs4
@@ -44,12 +44,14 @@ public class MyShortestPath {
     private static final HashMap<String, Integer> GENELENGTH_MAP = new  HashMap<>();
     private static double PENALTY4NOCONNECTION = 1000.0;
     private static boolean OUTPUTMATCHMIN = false; //output the minal value of gene with all_known_genes, to stdout.
+    private static boolean withSteps = false; // if true, the distance between two nodes is the total_weight + number_of_steps.
+                                              // if two nodes are not connectable, set the distance as the --penalty value.
 	
     private static final String DOC =
                 "MyUndirectedWeightedShortestPath.\n"
                 + "\n"
                 + "Usage:\n"
-                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] [-l file] [-n] [--omatchmin] [--penalty f] \n"
+                + "  MyUndirectedWeightedShortestPath [-k knownGene] (-i topGenes [-c int] | [-r int -b int] [--task string]) [-g gene] [-p int] [-t cpus] [-l file] [-n] [--omatchmin] [--penalty f] [--step] \n"
                 + "  MyUndirectedWeightedShortestPath (-h | --help)\n"
                 + "  MyUndirectedWeightedShortestPath --version\n"
                 + "\n"
@@ -76,8 +78,9 @@ public class MyShortestPath {
                 + "  -r int        Number of random picked genes for bootstrapping.\n"
                 + "  -b int        Number of bootstrappings.\n"
                 + "  -n            Output the gene name list for bootstrapping, in the first -r columns.\n"
-                + "  --penalty f  Set the penality for no connection between 2 genes, default 1000.0.\n"
+                + "  --penalty f   Set the penality for no connection between 2 genes, default 1000.0.\n"
                 + "  --omatchmin   Output the min value of a gene with known genes to stderr, default no output.\n"
+                + "  --step        Set the distance is the total_edge_weight + num_of_steps, if no path between nodes, the distance is the --penalty value.\n"
                 + "  -t cpus       Number of cpus for computing.\n"
                 + "  -h --help     Show this screen.\n"
                 + "  --version     Show version.\n"
@@ -103,7 +106,17 @@ public class MyShortestPath {
 //                                    .filter(k->{return sp.hasPathTo(k);})
                                     .mapToDouble(k->{
                                         if(sp.hasPathTo(k)){
-                                            return sp.distTo(k);
+                                            if (withSteps==true){
+                                                int step = 0; //make the edge is the weight + number_of_steps.
+                                                Iterable<Edge> edges = sp.pathTo(k);
+                                                for (Edge edge : edges) {
+                                                    step +=1;
+                                                }
+//                                                System.out.println(reverseIDNameMap.get(k)+":step: " + step);
+                                                return sp.distTo(k) + step;
+                                            }else{
+                                                return sp.distTo(k);
+                                            }
                                         }else{
                                             return PENALTY4NOCONNECTION;
                                         }
@@ -215,7 +228,7 @@ public class MyShortestPath {
 
     public static void main(String[] args) {
             Map<String, Object> opts =
-                 new Docopt(DOC).withVersion("1.7").parse(args);
+                 new Docopt(DOC).withVersion("1.8").parse(args);
 //		     System.err.println(opts);
             if(opts.get("-t") != null){
                     System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", (String) opts.get("-t"));
@@ -235,8 +248,13 @@ public class MyShortestPath {
                 PENALTY4NOCONNECTION = Double.parseDouble((String)opts.get("--penalty"));
             }
             //output the minvalue of a gene with known genes.
-            if(opts.get("--omatchmin") != null){
+            if((boolean)opts.get("--omatchmin") == true){
                 OUTPUTMATCHMIN = true;
+            }
+            
+            //Make the distance with steps.
+            if((boolean)opts.get("--step") == true){
+                withSteps = true;
             }
             
             
