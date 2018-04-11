@@ -261,7 +261,7 @@ public class MyShortestPath {
             
       
             boolean T_OUTPUTBOOTGENELIST = false;
-            if(opts.get("-n") != null){
+            if((boolean)opts.get("-n") == true){
                 T_OUTPUTBOOTGENELIST = true;
             }
             final boolean OUTPUTBOOTGENELIST = T_OUTPUTBOOTGENELIST;
